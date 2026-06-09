@@ -15,6 +15,7 @@
     { "src": "/(.*)", "dest": "public/$1" }
   ],
   "env": {
-    "NODE_ENV": "production"
+    "NODE_ENV": "production",
+    "SUPABASE_URL": "postgresql://postgres:2CD1ttV8enVMcKBj@db.imsylcojgjhuyyqzlmlb.supabase.co:5432/postgres"
   }
 }
