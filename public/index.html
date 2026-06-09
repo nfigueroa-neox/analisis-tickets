@@ -548,7 +548,96 @@
 
     <!-- Sección: Excel Elecmetal -->
     <div id="excelSection" style="display:none;">
-      <p style="color:#888;padding:40px;text-align:center;">📋 Sección Excel Elecmetal — Próximamente</p>
+      <div class="main-header">
+        <h1>📋 Excel Elecmetal</h1>
+      </div>
+
+      <!-- Estado de conexión -->
+      <div class="filters" style="justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span id="supaStatus" style="font-size:13px;color:#888;">Verificando conexión...</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="file" id="excelFileInput" accept=".xlsx" style="font-size:13px;">
+          <button class="btn" onclick="uploadExcel()" id="uploadBtn" disabled>📤 Cargar a BD</button>
+        </div>
+      </div>
+
+      <div id="excelLoading" class="loading">
+        <div class="spinner"></div>
+        <div id="excelLoadingMsg">Procesando...</div>
+      </div>
+
+      <!-- Resultados del análisis -->
+      <div id="excelResults" style="display:none;">
+        <!-- Summary -->
+        <div class="summary" id="excelSummary"></div>
+
+        <!-- Charts -->
+        <div class="charts-row">
+          <div class="chart-box">
+            <h3>📊 Estimación vs Reales</h3>
+            <canvas id="chartEstimacion"></canvas>
+          </div>
+          <div class="chart-box">
+            <h3>🎯 Cumplimiento</h3>
+            <canvas id="chartCumplimiento"></canvas>
+          </div>
+          <div class="chart-box">
+            <h3>📈 Promedio Horas</h3>
+            <canvas id="chartPromedio"></canvas>
+          </div>
+        </div>
+
+        <!-- Tabla comparativa -->
+        <div class="table-section">
+          <h3>📋 Comparación Estimación vs Horas Reales</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Ticket</th>
+                <th>Responsable</th>
+                <th>Estado</th>
+                <th>Prioridad</th>
+                <th>HH Estimadas</th>
+                <th>HH Reales</th>
+                <th>Desviación</th>
+                <th>Resultado</th>
+              </tr>
+            </thead>
+            <tbody id="comparacionTableBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Tickets antiguos -->
+        <div class="table-section">
+          <h3>⏰ Tickets con Cambio de Estado Más Antiguo</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Ticket</th>
+                <th>Estado</th>
+                <th>Responsable</th>
+                <th>Último Cambio</th>
+                <th>Días</th>
+                <th>Alerta</th>
+              </tr>
+            </thead>
+            <tbody id="antiguosTableBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Tickets por estado -->
+        <div class="table-section">
+          <h3>📊 Tickets por Estado</h3>
+          <table>
+            <thead>
+              <tr><th>Estado</th><th>Cantidad</th><th>Prom. HH Reales</th></tr>
+            </thead>
+            <tbody id="estadoTableBody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     </div><!-- /main-area -->
@@ -1047,9 +1136,189 @@
         document.getElementById('excelSection').style.display = 'none';
       } else if (section === 'excel') {
         document.querySelector('.sidebar-item:nth-child(2)').classList.add('active');
-        document.getElementById('horasSection').style.display = 'none';
-        document.getElementById('excelSection').style.display = 'block';
+        switchToExcel();
       }
+    }
+
+    // ─── Excel Elecmetal ────────────────────────────────────────────────────
+    let chartEstimacion = null;
+    let chartCumplimiento = null;
+    let chartPromedio = null;
+
+    // Al cambiar a la sección Excel, cargar estado
+    function switchToExcel() {
+      document.getElementById('excelSection').style.display = 'block';
+      document.getElementById('horasSection').style.display = 'none';
+      checkExcelStatus();
+    }
+
+    // Verificar estado de Supabase
+    async function checkExcelStatus() {
+      const statusEl = document.getElementById('supaStatus');
+      try {
+        const res = await fetch('/api/excel/status');
+        const data = await res.json();
+        if (data.connected) {
+          if (data.total > 0) {
+            const ultima = data.ultima_actualizacion ? new Date(data.ultima_actualizacion).toLocaleString() : 'desconocida';
+            statusEl.innerHTML = `✅ Conectado — ${data.total} tickets (última carga: ${ultima})`;
+            document.getElementById('uploadBtn').disabled = false;
+            cargarAnalisis();
+          } else {
+            statusEl.innerHTML = `✅ Conectado — Sin datos. Sube el Excel para comenzar.`;
+            document.getElementById('uploadBtn').disabled = false;
+          }
+        } else {
+          statusEl.innerHTML = `⚠️ ${data.message || 'No conectado'}`;
+          document.getElementById('uploadBtn').disabled = true;
+        }
+      } catch (e) {
+        statusEl.innerHTML = '❌ Error de conexión';
+      }
+    }
+
+    // Subir Excel
+    async function uploadExcel() {
+      const fileInput = document.getElementById('excelFileInput');
+      if (!fileInput.files.length) { alert('Selecciona un archivo Excel'); return; }
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+
+      const loading = document.getElementById('excelLoading');
+      const msg = document.getElementById('excelLoadingMsg');
+      loading.classList.add('active');
+      msg.textContent = 'Subiendo y procesando Excel...';
+
+      try {
+        const res = await fetch('/api/excel/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.ok) {
+          msg.innerHTML = `✅ Carga completada: ${data.insertados} insertados, ${data.actualizados} actualizados.`;
+          setTimeout(() => { loading.classList.remove('active'); }, 2000);
+          checkExcelStatus();
+        } else {
+          msg.textContent = '❌ Error: ' + (data.error || 'desconocido');
+        }
+      } catch (e) {
+        msg.textContent = '❌ Error de conexión';
+      }
+    }
+
+    // Cargar análisis
+    async function cargarAnalisis() {
+      try {
+        const res = await fetch('/api/excel/analisis');
+        const data = await res.json();
+        if (data.error) return;
+
+        document.getElementById('excelResults').style.display = 'block';
+        renderExcelAnalysis(data);
+      } catch (e) {}
+    }
+
+    function renderExcelAnalysis(data) {
+      // Summary cards
+      const r = data.resumen;
+      document.getElementById('excelSummary').innerHTML = `
+        <div class="card accent">
+          <div class="value">${r.total_con_estimacion}</div>
+          <div class="label">Tickets con Estimación</div>
+        </div>
+        <div class="card">
+          <div class="value">${r.total_con_reales || 0}</div>
+          <div class="label">Con Horas Reales</div>
+        </div>
+        <div class="card">
+          <div class="value">${r.dentro_estimacion || 0}</div>
+          <div class="label">✅ Dentro de Estimación</div>
+        </div>
+        <div class="card">
+          <div class="value">${r.excedido || 0}</div>
+          <div class="label">⚠️ Excedido</div>
+        </div>
+      `;
+
+      // Chart: estimación vs reales (barras)
+      if (chartEstimacion) chartEstimacion.destroy();
+      const comp = data.comparacion.filter(t => t.horas_reales !== null).slice(0, 15);
+      chartEstimacion = new Chart(document.getElementById('chartEstimacion'), {
+        type: 'bar',
+        data: {
+          labels: comp.map(t => (t.ticket_ref || '')),
+          datasets: [
+            { label: 'HH Estimadas', data: comp.map(t => t.horas_estimadas), backgroundColor: '#4e79a7', borderRadius: 4 },
+            { label: 'HH Reales', data: comp.map(t => t.horas_reales), backgroundColor: '#f28e2b', borderRadius: 4 },
+          ]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'top' } } }
+      });
+
+      // Chart: cumplimiento (donut)
+      if (chartCumplimiento) chartCumplimiento.destroy();
+      chartCumplimiento = new Chart(document.getElementById('chartCumplimiento'), {
+        type: 'doughnut',
+        data: {
+          labels: ['✅ Dentro estimación', '⚠️ Excedido', '❓ Sin datos'],
+          datasets: [{
+            data: [
+              r.dentro_estimacion || 0,
+              r.excedido || 0,
+              (r.total_con_estimacion - (r.dentro_estimacion || 0) - (r.excedido || 0))
+            ],
+            backgroundColor: ['#2ecc71', '#e74c3c', '#95a5a6'],
+          }]
+        },
+        options: { responsive: true, cutout: '60%', plugins: { legend: { position: 'right' } } }
+      });
+
+      // Chart: promedio (barra simple)
+      if (chartPromedio) chartPromedio.destroy();
+      chartPromedio = new Chart(document.getElementById('chartPromedio'), {
+        type: 'bar',
+        data: {
+          labels: ['HH Estimadas', 'HH Reales'],
+          datasets: [{
+            data: [r.promedio_horas_estimadas, r.promedio_horas_reales],
+            backgroundColor: ['#4e79a7', '#f28e2b'],
+            borderRadius: 4,
+          }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+      });
+
+      // Tabla comparación
+      document.getElementById('comparacionTableBody').innerHTML = data.comparacion.map(t => {
+        const cls = t.categoria === 'dentro' ? '#2ecc71' : t.categoria === 'excedido' ? '#e74c3c' : '#95a5a6';
+        return `<tr>
+          <td>${escapeHtml(t.ticket_ref || '')}</td>
+          <td>${escapeHtml(t.a_cargo_de || '—')}</td>
+          <td>${escapeHtml(t.estado || '—')}</td>
+          <td>${escapeHtml(t.prioridad || '—')}</td>
+          <td>${t.horas_estimadas || '—'}</td>
+          <td><strong>${t.horas_reales !== null ? t.horas_reales : '—'}</strong></td>
+          <td>${t.desviacion_pct !== null ? t.desviacion_pct + '%' : '—'}</td>
+          <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${cls};margin-right:4px;"></span>${t.categoria === 'dentro' ? '✅ Dentro' : t.categoria === 'excedido' ? '⚠️ Excedido' : '❓ Sin datos'}</td>
+        </tr>`;
+      }).join('');
+
+      // Tabla tickets antiguos
+      document.getElementById('antiguosTableBody').innerHTML = data.tickets_antiguos.map(t => {
+        const color = t.nivel_alerta === 'critico' ? '#e74c3c' : t.nivel_alerta === 'alerta' ? '#f39c12' : t.nivel_alerta === 'atencion' ? '#3498db' : '#2ecc71';
+        return `<tr>
+          <td>${escapeHtml(t.ticket_ref || '')}</td>
+          <td>${escapeHtml(t.estado || '—')}</td>
+          <td>${escapeHtml(t.a_cargo_de || '—')}</td>
+          <td>${t.cambio_estado ? new Date(t.cambio_estado).toLocaleDateString() : '—'}</td>
+          <td><strong>${t.dias || '—'}</strong></td>
+          <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};margin-right:4px;"></span>${t.nivel_alerta}</td>
+        </tr>`;
+      }).join('');
+
+      // Tabla por estado
+      document.getElementById('estadoTableBody').innerHTML = data.por_estado.map(e =>
+        `<tr><td>${escapeHtml(e.estado || '—')}</td><td>${e.cantidad}</td><td>${e.promedio_horas || '—'}</td></tr>`
+      ).join('');
     }
 
     // ─── Modal detalle de ticket ─────────────────────────────────────────

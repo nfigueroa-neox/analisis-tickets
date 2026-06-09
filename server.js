@@ -148,8 +148,30 @@ function parseUserEmail(commentaryBy) {
   return match ? match[1].toLowerCase() : commentaryBy.toLowerCase().trim();
 }
 
+// ─── Supabase (PostgreSQL) ─────────────────────────────────────────────────
+const { Pool } = require("pg");
+let pgPool = null;
+
+function getPgPool() {
+  if (!pgPool) {
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    if (SUPABASE_URL) {
+      pgPool = new Pool({
+        connectionString: SUPABASE_URL,
+        ssl: { rejectUnauthorized: false },
+      });
+      console.log("Supabase pool listo");
+    }
+  }
+  return pgPool;
+}
+
+// ─── Multer (subida de archivos) ────────────────────────────────────────────
+const multer = require("multer");
+const upload = multer({ storage: multer.memoryStorage() });
+
 // ─── Middleware ─────────────────────────────────────────────────────────────
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
 app.use(express.static("public"));
 
 // ─── Auth middleware ────────────────────────────────────────────────────────
@@ -502,6 +524,254 @@ app.get("/api/ticket/:ticketNumber", requireAdmin, async (req, res) => {
       comments: commentsWithHours,
     });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ─── Endpoints para Excel Elecmental (Supabase) ───────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+
+// 1. Estado de la conexión y datos
+app.get("/api/excel/status", requireAdmin, async (req, res) => {
+  try {
+    const pool = getPgPool();
+    if (!pool) return res.json({ connected: false, message: "SUPABASE_URL no configurada" });
+
+    const result = await pool.query("SELECT COUNT(*) as total FROM tickets_elecmetal");
+    const count = parseInt(result.rows[0].total);
+
+    // Última actualización
+    const lastUpdate = await pool.query(
+      "SELECT MAX(updated_at) as ultima FROM tickets_elecmetal"
+    );
+
+    res.json({
+      connected: true,
+      total: count,
+      ultima_actualizacion: lastUpdate.rows[0].ultima,
+    });
+  } catch (err) {
+    if (err.code === "42P01") {
+      // Tabla no existe
+      return res.json({ connected: true, total: 0, message: "Tabla no creada aún" });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. Subir Excel y sincronizar con Supabase
+app.post("/api/excel/upload", requireAdmin, upload.single("file"), async (req, res) => {
+  try {
+    const pool = getPgPool();
+    if (!pool) return res.status(400).json({ error: "Supabase no configurado" });
+
+    const X = require("xlsx");
+    const wb = X.read(req.file.buffer, { type: "buffer" });
+    const sheet = wb.Sheets["NEOX Elecmetal"];
+    if (!sheet) return res.status(400).json({ error: "Hoja 'NEOX Elecmetal' no encontrada" });
+
+    const data = X.utils.sheet_to_json(sheet, { defval: null, header: 1 });
+    if (data.length < 2) return res.status(400).json({ error: "Excel vacío" });
+
+    // Extraer encabezados de la fila 1 (fechas de seguimiento diario)
+    const headers = data[0];
+    const rows = data.slice(1);
+
+    let insertados = 0;
+    let actualizados = 0;
+
+    for (const row of rows) {
+      const title = (row[0] || "").toString().trim();
+      if (!title) continue;
+
+      const ticketRef = title.match(/#\d+/)?.[0] || null;
+
+      // Construir JSON de horas diarias
+      const horasDiarias = {};
+      for (let i = 12; i < headers.length; i++) {
+        const h = headers[i];
+        if (h && !h.toString().startsWith("__EMPTY") && row[i] !== null && row[i] !== "") {
+          const val = parseFloat(row[i]);
+          if (!isNaN(val) && val > 0) {
+            const fecha = h.toString().trim();
+            horasDiarias[fecha] = val;
+          }
+        }
+      }
+
+      const fields = {
+        ticket_ref: ticketRef,
+        title: title,
+        estado: row[4] || null,
+        a_cargo_de: row[5] || null,
+        prioridad: row[6] || null,
+        tipo: row[7] || null,
+        horas_estimadas: parseFloat(row[8]) || null,
+        horas_reales: parseFloat(row[9]) || null,
+        vb_george: row[10] || null,
+        se_aplica_en: row[11] || null,
+        horas_diarias: horasDiarias,
+        avance: parseFloat(row[row.length - 3]) || null,
+        responsable_validacion: row[row.length - 2] || null,
+        avance_semana_anterior: parseFloat(row[row.length - 1]) || null,
+      };
+
+      // Fecha de creación (columna B / índice 1)
+      if (row[1]) {
+        try { fields.fecha_creacion = new Date(row[1]); } catch (e) {}
+      }
+      // Cambio de estado (columna C / índice 2)
+      if (row[2]) {
+        try { fields.cambio_estado = new Date(row[2]); } catch (e) {}
+      }
+      // Días (columna D / índice 3)
+      if (row[3] !== null && row[3] !== "") {
+        fields.dias = parseInt(row[3]) || null;
+      }
+
+      // UPSERT: si existe el mismo ticket_ref, actualizar; si no, insertar
+      if (ticketRef) {
+        const existing = await pool.query(
+          "SELECT id FROM tickets_elecmetal WHERE ticket_ref = $1",
+          [ticketRef]
+        );
+
+        if (existing.rows.length > 0) {
+          const sets = Object.entries(fields)
+            .filter(([k]) => k !== "ticket_ref")
+            .map(([k, v], i) => `${k} = $${i + 2}`)
+            .join(", ");
+          const vals = Object.entries(fields)
+            .filter(([k]) => k !== "ticket_ref")
+            .map(([, v]) => v);
+          await pool.query(
+            `UPDATE tickets_elecmetal SET ${sets} WHERE ticket_ref = $1`,
+            [ticketRef, ...vals]
+          );
+          actualizados++;
+        } else {
+          const cols = Object.keys(fields).join(", ");
+          const params = Object.keys(fields).map((_, i) => `$${i + 1}`).join(", ");
+          const vals = Object.values(fields);
+          await pool.query(
+            `INSERT INTO tickets_elecmetal (${cols}) VALUES (${params})`,
+            vals
+          );
+          insertados++;
+        }
+      }
+    }
+
+    res.json({
+      ok: true,
+      insertados,
+      actualizados,
+      total_filas: rows.filter(r => (r[0] || "").toString().trim()).length,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. Análisis: comparación estimación vs real
+app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
+  try {
+    const pool = getPgPool();
+    if (!pool) return res.json({ error: "Supabase no configurado" });
+
+    // Tickets con horas estimadas y reales
+    const comparacion = await pool.query(`
+      SELECT
+        ticket_ref,
+        title,
+        a_cargo_de,
+        estado,
+        prioridad,
+        horas_estimadas,
+        horas_reales,
+        CASE
+          WHEN horas_estimadas > 0 AND horas_reales IS NOT NULL
+            THEN ROUND(((horas_estimadas - horas_reales) / horas_estimadas * 100)::numeric, 1)
+          ELSE NULL
+        END as desviacion_pct,
+        CASE
+          WHEN horas_estimadas > 0 AND horas_reales IS NOT NULL AND horas_reales <= horas_estimadas THEN 'dentro'
+          WHEN horas_estimadas > 0 AND horas_reales IS NOT NULL AND horas_reales > horas_estimadas THEN 'excedido'
+          ELSE 'sin_datos'
+        END as categoria
+      FROM tickets_elecmetal
+      WHERE horas_estimadas IS NOT NULL AND horas_estimadas > 0
+      ORDER BY horas_estimadas DESC
+    `);
+
+    // Resumen de cumplimiento
+    const resumen = await pool.query(`
+      SELECT
+        COUNT(*) as total_con_estimacion,
+        SUM(CASE WHEN horas_reales IS NOT NULL THEN 1 ELSE 0 END) as total_con_reales,
+        SUM(CASE WHEN horas_reales IS NOT NULL AND horas_reales <= horas_estimadas THEN 1 ELSE 0 END) as dentro_estimacion,
+        SUM(CASE WHEN horas_reales IS NOT NULL AND horas_reales > horas_estimadas THEN 1 ELSE 0 END) as excedido,
+        ROUND(AVG(CASE WHEN horas_reales IS NOT NULL THEN horas_reales ELSE NULL END)::numeric, 1) as promedio_horas_reales,
+        ROUND(AVG(horas_estimadas)::numeric, 1) as promedio_horas_estimadas
+      FROM tickets_elecmetal
+      WHERE horas_estimadas IS NOT NULL AND horas_estimadas > 0
+    `);
+
+    // Análisis por estado y tiempo
+    const por_estado = await pool.query(`
+      SELECT
+        estado,
+        COUNT(*) as cantidad,
+        ROUND(AVG(
+          CASE WHEN horas_reales IS NOT NULL THEN horas_reales ELSE NULL END
+        )::numeric, 1) as promedio_horas
+      FROM tickets_elecmetal
+      GROUP BY estado
+      ORDER BY cantidad DESC
+    `);
+
+    // Tickets con cambio de estado más antiguo
+    const tickets_antiguos = await pool.query(`
+      SELECT
+        ticket_ref,
+        title,
+        estado,
+        a_cargo_de,
+        cambio_estado,
+        dias,
+        CASE
+          WHEN dias >= 90 THEN 'critico'
+          WHEN dias >= 30 THEN 'alerta'
+          WHEN dias >= 7 THEN 'atencion'
+          ELSE 'normal'
+        END as nivel_alerta
+      FROM tickets_elecmetal
+      WHERE cambio_estado IS NOT NULL
+      ORDER BY cambio_estado ASC
+      LIMIT 50
+    `);
+
+    // Métricas generales
+    const metricas = await pool.query(`
+      SELECT
+        ROUND(AVG(CASE WHEN horas_reales IS NOT NULL THEN horas_reales ELSE NULL END)::numeric, 1) as avg_horas_reales,
+        ROUND(AVG(horas_estimadas)::numeric, 1) as avg_horas_estimadas,
+        COUNT(*) as total_tickets,
+        SUM(CASE WHEN estado ILIKE '%validaci%cliente%' OR estado ILIKE '%pendiente%cliente%' THEN 1 ELSE 0 END) as pendientes_cliente
+      FROM tickets_elecmetal
+    `);
+
+    res.json({
+      comparacion: comparacion.rows,
+      resumen: resumen.rows[0],
+      por_estado: por_estado.rows,
+      tickets_antiguos: tickets_antiguos.rows,
+      metricas: metricas.rows[0],
+    });
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
