@@ -1,7 +1,9 @@
 node_modules/
 .env
 backend/node_modules/
+dist/
 frontend/node_modules/
 frontend/.angular/
 frontend/dist/
-dist/
+frontend/package.json.bak
+frontend/package-lock.json.bak

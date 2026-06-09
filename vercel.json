@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "cd frontend && npm install && npx ng build --output-path ../dist --output-hashing all",
+  "buildCommand": "npm run build",
   "outputDirectory": "dist/browser",
   "builds": [
     {
@@ -17,8 +17,5 @@
     { "src": "/api/(.*)", "dest": "backend/api/index.js" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
-  ],
-  "env": {
-    "NODE_ENV": "production"
-  }
+  ]
 }
