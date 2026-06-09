@@ -12,6 +12,48 @@ const DB_NAME = process.env.DB_NAME || "nxsupport";
 const SESSION_SECRET = process.env.SESSION_SECRET || "nxsupport-horas-secret-key-2024";
 
 let db;
+let excelPriorityMap = {}; // #XYZ -> prioridad
+
+// ─── Cargar Excel de Elecmetal ──────────────────────────────────────────────
+function loadExcel() {
+  try {
+    const X = require("xlsx");
+    const wb = X.readFile(process.env.EXCEL_PATH || "D:/Neox/Proyectos/Monitoreo-Tickets/_Ticket_Elecmental.xlsx");
+    const sheet = wb.Sheets["NEOX Elecmetal"];
+    if (!sheet) { console.log("Sheet NEOX Elecmetal no encontrada"); return; }
+    const data = X.utils.sheet_to_json(sheet, { defval: "" });
+    data.forEach((r) => {
+      const title = (r["1"] || "").trim();
+      const prio = (r["Prioridad "] || "").trim();
+      if (title && prio) {
+        // Extraer #XYZ del título: "#265 - algo" -> "#265"
+        const match = title.match(/#\d+/);
+        if (match) {
+          excelPriorityMap[match[0]] = prio;
+        }
+      }
+    });
+    console.log(`Excel cargado: ${Object.keys(excelPriorityMap).length} tickets con prioridad`);
+  } catch (e) {
+    console.log("Excel no disponible:", e.message);
+  }
+}
+loadExcel();
+
+// ─── Mapeo de prioridad a color ─────────────────────────────────────────────
+const PRIO_MAP = {
+  "Crítica": { color: "#e74c3c", level: "alta", order: 0 },
+  "Mayor":   { color: "#e74c3c", level: "alta", order: 0 },
+  "Media":   { color: "#f1c40f", level: "media", order: 1 },
+  "Menor":   { color: "#2ecc71", level: "baja", order: 2 },
+};
+
+function getPriorityFromTicket(title) {
+  if (!title) return null;
+  const m = title.match(/#\d+/);
+  if (m && excelPriorityMap[m[0]]) return excelPriorityMap[m[0]];
+  return null;
+}
 
 // Trust proxy (Vercel termina HTTPS en edge, reenvía HTTP internamente)
 app.set("trust proxy", 1);
@@ -322,12 +364,17 @@ app.get("/api/hours", requireAdmin, async (req, res) => {
         // Por ticket
         const ticketKey = c.ticketNumber;
         if (!hoursByTicket[ticketKey]) {
+          const prio = getPriorityFromTicket(c.title);
+          const prioInfo = PRIO_MAP[prio] || { color: "#95a5a6", level: "sin prioridad", order: 3 };
           hoursByTicket[ticketKey] = {
             ticketNumber: c.ticketNumber,
             title: c.title,
             company: c.company,
             system: c.system,
             status: c.status,
+            priority: prio || "sin prioridad",
+            priorityLevel: prioInfo.level,
+            priorityColor: prioInfo.color,
             totalHours: 0,
             comments: [],
           };
@@ -352,6 +399,27 @@ app.get("/api/hours", requireAdmin, async (req, res) => {
       }
     }
 
+    // Calcular horas por prioridad
+    const hoursByPriority = {};
+    Object.values(hoursByTicket).forEach(t => {
+      const level = t.priorityLevel || "sin prioridad";
+      hoursByPriority[level] = (hoursByPriority[level] || 0) + t.totalHours;
+    });
+    const priorityLabels = { alta: "Alta", media: "Media", baja: "Baja", "sin prioridad": "Sin prioridad" };
+    const priorityColors = { alta: "#e74c3c", media: "#f1c40f", baja: "#2ecc71", "sin prioridad": "#95a5a6" };
+
+    const hoursByPriorityArr = Object.entries(hoursByPriority)
+      .map(([level, hrs]) => ({
+        level,
+        label: priorityLabels[level] || level,
+        hours: Math.round(hrs * 100) / 100,
+        color: priorityColors[level] || "#95a5a6",
+      }))
+      .sort((a, b) => {
+        const order = { alta: 0, media: 1, baja: 2, "sin prioridad": 3 };
+        return (order[a.level] || 99) - (order[b.level] || 99);
+      });
+
     // Tickets sin horas (solo comentarios del usuario en el período)
     const ticketsWorked = Array.from(ticketsMap.values());
 
@@ -359,6 +427,7 @@ app.get("/api/hours", requireAdmin, async (req, res) => {
       userEmail,
       period: { start: startDate, end: endDate },
       totalHours: Math.round(totalHours * 100) / 100,
+      hoursByPriority: hoursByPriorityArr,
       hoursByCompany: Object.entries(hoursByCompany)
         .map(([name, hrs]) => ({
           company: name,

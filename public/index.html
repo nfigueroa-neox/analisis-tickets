@@ -11,9 +11,79 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: #f0f2f5;
       color: #1a1a2e;
-      padding: 20px;
     }
-    .container { max-width: 1400px; margin: 0 auto; }
+
+    /* ─── Layout ─── */
+    .app-layout { display: flex; min-height: 100vh; }
+
+    /* ─── Sidebar ─── */
+    .sidebar {
+      width: 240px;
+      background: #1a1a2e;
+      color: white;
+      padding: 0;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-logo {
+      padding: 24px 20px 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .sidebar-logo h2 { font-size: 16px; font-weight: 700; }
+    .sidebar-logo p { font-size: 11px; opacity: 0.6; margin-top: 2px; }
+    .sidebar-menu { padding: 12px 0; flex: 1; }
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 20px;
+      font-size: 14px;
+      cursor: pointer;
+      color: rgba(255,255,255,0.7);
+      transition: all 0.15s;
+      border-left: 3px solid transparent;
+    }
+    .sidebar-item:hover { background: rgba(255,255,255,0.06); color: white; }
+    .sidebar-item.active {
+      background: rgba(255,255,255,0.1);
+      color: white;
+      border-left-color: #e94560;
+    }
+    .sidebar-item .icon { font-size: 18px; }
+    .sidebar-footer {
+      padding: 16px 20px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      font-size: 12px;
+      opacity: 0.5;
+    }
+
+    /* ─── Main ─── */
+    .main-area { flex: 1; padding: 24px; overflow-y: auto; }
+    .main-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+    .main-header h1 { font-size: 20px; font-weight: 700; color: #1a1a2e; }
+    .main-header .user-badge {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: #666;
+    }
+    .main-header .user-badge button {
+      background: none;
+      border: 1px solid #d0d5dd;
+      border-radius: 6px;
+      padding: 4px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      color: #666;
+    }
+    .main-header .user-badge button:hover { background: #f0f0f0; }
     header {
       background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
       color: white;
@@ -351,19 +421,34 @@
     </div>
   </div>
 
-  <div class="container" id="appContainer" style="display:none;">
-    <header style="display:flex;justify-content:space-between;align-items:center;">
-      <div>
-        <h1>NXSupport — Visor de Horas Trabajadas</h1>
-        <p>Analiza las horas registradas por usuario, empresa y período</p>
+  <div class="app-layout" id="appContainer" style="display:none;">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-logo">
+        <h2>NXSupport</h2>
+        <p>Panel de Análisis</p>
       </div>
-      <div style="text-align:right;font-size:13px;">
-        <div id="userInfo" style="opacity:0.8;"></div>
-        <button onclick="doLogout()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;border-radius:6px;padding:4px 12px;cursor:pointer;margin-top:4px;font-size:12px;">Cerrar sesión</button>
+      <div class="sidebar-menu">
+        <div class="sidebar-item active" onclick="switchSection('horas')">
+          <span class="icon">📊</span> Análisis de Horas
+        </div>
+        <div class="sidebar-item" onclick="switchSection('excel')">
+          <span class="icon">📋</span> Excel Elecmetal
+        </div>
       </div>
-    </header>
+      <div class="sidebar-footer">
+        <div id="userInfo" style="opacity:0.8;margin-bottom:8px;"></div>
+        <button onclick="doLogout()" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:white;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;">Cerrar sesión</button>
+      </div>
+    </div>
 
-    <div class="filters">
+    <!-- Main Content -->
+    <div class="main-area">
+      <div class="main-header">
+        <h1>📊 Análisis de Horas</h1>
+      </div>
+
+      <div class="filters">
       <div class="filter-group">
         <label>Usuario</label>
         <select id="userSelect"><option value="">Cargando usuarios...</option></select>
@@ -390,7 +475,8 @@
       <div>Consultando base de datos...</div>
     </div>
 
-    <!-- Results -->
+    <!-- Sección: Análisis de Horas -->
+    <div id="horasSection">
     <div id="results" style="display:none;">
       <div class="summary" id="summaryCards"></div>
 
@@ -410,6 +496,10 @@
           </h3>
           <canvas id="chartPeriod"></canvas>
         </div>
+        <div class="chart-box">
+          <h3>🔴 Horas por Prioridad</h3>
+          <canvas id="chartPriority"></canvas>
+        </div>
       </div>
 
       <div class="table-section">
@@ -422,6 +512,7 @@
               <th>Empresa</th>
               <th>Sistema</th>
               <th>Estado</th>
+              <th>Prioridad</th>
               <th>Total HH</th>
               <th>Comentarios</th>
             </tr>
@@ -449,11 +540,21 @@
         <div id="modalBody"></div>
       </div>
     </div>
-  </div>
+
+    </div><!-- /horasSection -->
+
+    <!-- Sección: Excel Elecmetal -->
+    <div id="excelSection" style="display:none;">
+      <p style="color:#888;padding:40px;text-align:center;">📋 Sección Excel Elecmetal — Próximamente</p>
+    </div>
+
+    </div><!-- /main-area -->
+  </div><!-- /app-layout -->
 
   <script>
     let chartCompany = null;
     let chartPeriod = null;
+    let chartPriority = null;
     let lastData = null;
     let selectedCompany = null;
     const COMPANY_PALETTE = [
@@ -658,6 +759,9 @@
       // Chart: hours by period
       renderPeriodChart(data);
 
+      // Chart: hours by priority
+      renderPriorityChart(data);
+
       renderTicketsTable(data);
 
       // Company summary table
@@ -753,6 +857,8 @@
           <td>${escapeHtml(t.company)}</td>
           <td>${escapeHtml(t.system || '—')}</td>
           <td><span class="badge ${(t.status || '').toLowerCase()}">${escapeHtml(t.status)}</span></td>
+          <td>${t.priority ? `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${t.priorityColor};margin-right:4px;"></span>${escapeHtml(t.priority)}
+          ` : '<span style="color:#bbb">—</span>'}</td>
           <td><strong>${t.totalHours} HH</strong></td>
           <td class="comment-cell">
             ${t.comments.slice(0, 3).map(c =>
@@ -848,6 +954,66 @@
     function redrawPeriodChart() {
       if (lastData) {
         renderPeriodChart(lastData);
+      }
+    }
+
+    // ─── Gráfico de prioridades ───────────────────────────────────────────
+    function renderPriorityChart(data) {
+      if (!data.hoursByPriority) return;
+      if (chartPriority) chartPriority.destroy();
+      const ctx = document.getElementById('chartPriority').getContext('2d');
+      chartPriority = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: data.hoursByPriority.map(d => d.label),
+          datasets: [{
+            data: data.hoursByPriority.map(d => d.hours),
+            backgroundColor: data.hoursByPriority.map(d => d.color),
+            borderWidth: 2,
+            borderColor: '#fff',
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          cutout: '55%',
+          plugins: {
+            legend: { position: 'right', labels: { font: { size: 12 } } },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.label}: ${ctx.raw} HH`,
+              }
+            }
+          }
+        },
+        plugins: [{
+          id: 'priorityCenter',
+          beforeDraw(chart) {
+            const {width, height, ctx} = chart;
+            const total = data.hoursByPriority.reduce((s, d) => s + d.hours, 0);
+            ctx.save();
+            ctx.font = 'bold 18px sans-serif';
+            ctx.fillStyle = '#1a1a2e';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(total + ' HH', width / 2, height / 2);
+            ctx.restore();
+          }
+        }]
+      });
+    }
+
+    // ─── Switch de secciones del menú lateral ────────────────────────────
+    function switchSection(section) {
+      document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+      if (section === 'horas') {
+        document.querySelector('.sidebar-item:nth-child(1)').classList.add('active');
+        document.getElementById('horasSection').style.display = 'block';
+        document.getElementById('excelSection').style.display = 'none';
+      } else if (section === 'excel') {
+        document.querySelector('.sidebar-item:nth-child(2)').classList.add('active');
+        document.getElementById('horasSection').style.display = 'none';
+        document.getElementById('excelSection').style.display = 'block';
       }
     }
 
