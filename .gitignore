@@ -1,10 +1,2 @@
 node_modules/
 .env
-backend/node_modules/
-dist/
-.angular/
-frontend/node_modules/
-frontend/.angular/
-frontend/dist/
-frontend/package.json.bak
-frontend/package-lock.json.bak

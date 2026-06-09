@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NXSupport - Visor de Horas Trabajadas</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+    }
+
+    /* ─── Layout ─── */
+    .app-layout { display: flex; min-height: 100vh; }
+
+    /* ─── Sidebar ─── */
+    .sidebar {
+      width: 240px;
+      background: #1a1a2e;
+      color: white;
+      padding: 0;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-logo {
+      padding: 24px 20px 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .sidebar-logo h2 { font-size: 16px; font-weight: 700; }
+    .sidebar-logo p { font-size: 11px; opacity: 0.6; margin-top: 2px; }
+    .sidebar-menu { padding: 12px 0; flex: 1; }
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 20px;
+      font-size: 14px;
+      cursor: pointer;
+      color: rgba(255,255,255,0.7);
+      transition: all 0.15s;
+      border-left: 3px solid transparent;
+    }
+    .sidebar-item:hover { background: rgba(255,255,255,0.06); color: white; }
+    .sidebar-item.active {
+      background: rgba(255,255,255,0.1);
+      color: white;
+      border-left-color: #e94560;
+    }
+    .sidebar-item .icon { font-size: 18px; }
+    .sidebar-footer {
+      padding: 16px 20px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      font-size: 12px;
+      opacity: 0.5;
+    }
+
+    /* ─── Main ─── */
+    .main-area { flex: 1; padding: 24px; overflow-y: auto; }
+    .main-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+    .main-header h1 { font-size: 20px; font-weight: 700; color: #1a1a2e; }
+    .main-header .user-badge {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: #666;
+    }
+    .main-header .user-badge button {
+      background: none;
+      border: 1px solid #d0d5dd;
+      border-radius: 6px;
+      padding: 4px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      color: #666;
+    }
+    .main-header .user-badge button:hover { background: #f0f0f0; }
+    header {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: white;
+      padding: 20px 30px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+    }
+    header h1 { font-size: 24px; font-weight: 700; }
+    header p { opacity: 0.8; margin-top: 4px; font-size: 14px; }
+
+    /* ─── Login screen ─── */
+    .login-screen {
+      position: fixed; inset: 0;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      display: flex; justify-content: center; align-items: center;
+      z-index: 2000;
+    }
+    .login-screen.hidden { display: none; }
+    .login-box {
+      background: white;
+      border-radius: 16px;
+      padding: 40px;
+      width: 380px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .login-box h2 { font-size: 22px; margin-bottom: 4px; }
+    .login-box p { font-size: 13px; color: #888; margin-bottom: 24px; }
+    .login-box .field {
+      margin-bottom: 16px;
+    }
+    .login-box .field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #666;
+      margin-bottom: 4px;
+    }
+    .login-box .field input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid #d0d5dd;
+      border-radius: 8px;
+      font-size: 15px;
+    }
+    .login-box .field input:focus {
+      outline: none;
+      border-color: #1a1a2e;
+      box-shadow: 0 0 0 3px rgba(26,26,46,0.1);
+    }
+    .login-box .btn-login {
+      width: 100%;
+      padding: 12px;
+      background: #1a1a2e;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    .login-box .btn-login:hover { background: #2d2d4e; }
+    .login-box .btn-login:disabled { opacity: 0.5; cursor: not-allowed; }
+    .login-error {
+      color: #e94560;
+      font-size: 13px;
+      margin-top: 8px;
+      display: none;
+    }
+    .login-error.show { display: block; }
+    .login-error.no-admin { color: #f39c12; }
+
+    /* ─── Filters ─── */
+    .filters {
+      background: white;
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: flex-end;
+    }
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .filter-group label {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #666;
+    }
+    .filter-group select, .filter-group input {
+      padding: 8px 12px;
+      border: 1px solid #d0d5dd;
+      border-radius: 8px;
+      font-size: 14px;
+      background: white;
+      min-width: 180px;
+      transition: border-color 0.2s;
+    }
+    .filter-group select:focus, .filter-group input:focus {
+      outline: none;
+      border-color: #1a1a2e;
+      box-shadow: 0 0 0 3px rgba(26,26,46,0.1);
+    }
+    .btn {
+      padding: 8px 24px;
+      background: #1a1a2e;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      height: 38px;
+    }
+    .btn:hover { background: #2d2d4e; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ─── Loading ─── */
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 40px;
+      font-size: 16px;
+      color: #666;
+    }
+    .loading.active { display: block; }
+    .spinner {
+      display: inline-block;
+      width: 32px;
+      height: 32px;
+      border: 3px solid #e0e0e0;
+      border-top-color: #1a1a2e;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-bottom: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Summary Cards ─── */
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      text-align: center;
+    }
+    .card .value {
+      font-size: 32px;
+      font-weight: 700;
+      color: #1a1a2e;
+    }
+    .card .label {
+      font-size: 13px;
+      color: #888;
+      margin-top: 4px;
+    }
+    .card.accent { border-top: 3px solid #1a1a2e; }
+
+    /* ─── Charts Row ─── */
+    .charts-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .chart-box {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .chart-box h3 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #444;
+    }
+    .chart-box canvas {
+      max-height: 300px;
+    }
+
+    /* ─── Tables ─── */
+    .table-section {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      margin-bottom: 24px;
+      overflow-x: auto;
+    }
+    .table-section h3 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #444;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      text-align: left;
+      padding: 10px 12px;
+      background: #f8f9fa;
+      font-weight: 600;
+      color: #555;
+      white-space: nowrap;
+      border-bottom: 2px solid #e0e0e0;
+    }
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #eee;
+      vertical-align: top;
+    }
+    tr:hover td { background: #f8f9fa; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge.pendiente { background: #fff3cd; color: #856404; }
+    .badge.resuelto { background: #d4edda; color: #155724; }
+    .badge.atendiendo { background: #cce5ff; color: #004085; }
+    .badge.pausado { background: #f8d7da; color: #721c24; }
+    .badge.documentación { background: #e2e3e5; color: #383d41; }
+
+    .comment-cell {
+      max-width: 350px;
+      font-size: 12px;
+      color: #555;
+      line-height: 1.4;
+    }
+    .comment-cell .comment-item {
+      padding: 4px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .comment-cell .comment-item:last-child { border-bottom: none; }
+    .comment-cell .hh { color: #1a1a2e; font-weight: 700; }
+
+    .ticket-link {
+      color: #1a1a2e;
+      text-decoration: none;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .ticket-link:hover { text-decoration: underline; }
+
+    /* ─── Modal ─── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: white;
+      border-radius: 12px;
+      max-width: 800px;
+      width: 100%;
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 24px;
+    }
+    .modal h2 { margin-bottom: 16px; font-size: 18px; }
+    .modal-close {
+      float: right;
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #888;
+    }
+    .modal-close:hover { color: #333; }
+    .modal-section { margin-bottom: 16px; }
+    .modal-section h4 { font-size: 13px; color: #666; margin-bottom: 6px; text-transform: uppercase; }
+    .modal-comment {
+      padding: 8px 12px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+    .modal-comment .meta { font-size: 11px; color: #888; margin-bottom: 4px; }
+
+    @media (max-width: 768px) {
+      .charts-row { grid-template-columns: 1fr; }
+      .filters { flex-direction: column; }
+      .filter-group select, .filter-group input { min-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Login Screen -->
+  <div class="login-screen" id="loginScreen">
+    <div class="login-box">
+      <h2>🔐 NXSupport</h2>
+      <p>Visor de Horas Trabajadas — Inicia sesión</p>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="loginEmail" placeholder="usuario@neox.cl" autocomplete="email">
+      </div>
+      <div class="field">
+        <label>Contraseña</label>
+        <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="btn-login" id="loginBtn" onclick="doLogin()">Ingresar</button>
+      <div class="login-error" id="loginError"></div>
+    </div>
+  </div>
+
+  <div class="app-layout" id="appContainer" style="display:none;">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-logo">
+        <h2>NXSupport</h2>
+        <p>Panel de Análisis</p>
+      </div>
+      <div class="sidebar-menu">
+        <div class="sidebar-item active" onclick="switchSection('horas')">
+          <span class="icon">📊</span> Análisis de Horas
+        </div>
+        <div class="sidebar-item" onclick="switchSection('excel')">
+          <span class="icon">📋</span> Excel Elecmetal
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <div id="userInfo" style="opacity:0.8;margin-bottom:8px;"></div>
+        <button onclick="doLogout()" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:white;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;">Cerrar sesión</button>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-area">
+      <div class="main-header">
+        <h1>📊 Análisis de Horas</h1>
+      </div>
+
+      <div class="filters">
+      <div class="filter-group">
+        <label>Usuario</label>
+        <select id="userSelect"><option value="">Cargando usuarios...</option></select>
+      </div>
+      <div class="filter-group">
+        <label>Empresa</label>
+        <select id="companySelect"><option value="todas">Todas</option></select>
+      </div>
+
+      <div class="filter-group">
+        <label>Desde</label>
+        <input type="date" id="startDate">
+      </div>
+      <div class="filter-group">
+        <label>Hasta</label>
+        <input type="date" id="endDate">
+      </div>
+      <button class="btn" id="searchBtn" onclick="search()">🔍 Consultar</button>
+    </div>
+
+    <!-- Loading -->
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <div>Consultando base de datos...</div>
+    </div>
+
+    <!-- Sección: Análisis de Horas -->
+    <div id="horasSection">
+    <div id="results" style="display:none;">
+      <div class="summary" id="summaryCards"></div>
+
+      <div class="charts-row">
+        <div class="chart-box">
+          <h3>📊 Horas por Empresa</h3>
+          <canvas id="chartCompany"></canvas>
+        </div>
+        <div class="chart-box">
+          <h3 style="display:flex;justify-content:space-between;align-items:center;">
+            📈 Horas por Período
+            <select id="periodType" style="font-size:12px;padding:4px 8px;border:1px solid #d0d5dd;border-radius:6px;background:white;font-weight:400;" onchange="redrawPeriodChart()">
+              <option value="day">Días</option>
+              <option value="week">Semanas</option>
+              <option value="month">Meses</option>
+            </select>
+          </h3>
+          <canvas id="chartPeriod"></canvas>
+        </div>
+        <div class="chart-box">
+          <h3>🔴 Horas por Prioridad</h3>
+          <canvas id="chartPriority"></canvas>
+        </div>
+      </div>
+
+      <div class="table-section">
+        <h3>📋 Tickets con Horas Registradas</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Ticket</th>
+              <th>Título</th>
+              <th>Empresa</th>
+              <th>Sistema</th>
+              <th>Estado</th>
+              <th>Prioridad</th>
+              <th>Total HH</th>
+              <th>Comentarios</th>
+            </tr>
+          </thead>
+          <tbody id="ticketsTableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="table-section">
+        <h3>📋 Resumen por Empresa</h3>
+        <table>
+          <thead>
+            <tr><th>Empresa</th><th>Horas</th></tr>
+          </thead>
+          <tbody id="companyTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+      <div class="modal">
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+        <h2 id="modalTitle">Detalle del Ticket</h2>
+        <div id="modalBody"></div>
+      </div>
+    </div>
+
+    </div><!-- /horasSection -->
+
+    <!-- Sección: Excel Elecmetal -->
+    <div id="excelSection" style="display:none;">
+      <p style="color:#888;padding:40px;text-align:center;">📋 Sección Excel Elecmetal — Próximamente</p>
+    </div>
+
+    </div><!-- /main-area -->
+  </div><!-- /app-layout -->
+
+  <script>
+    let chartCompany = null;
+    let chartPeriod = null;
+    let chartPriority = null;
+    let lastData = null;
+    let selectedCompany = null;
+    const COMPANY_PALETTE = [
+      '#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac',
+      '#86bcf2','#f8ac5c','#f1787c','#9ed9cc','#7ec86f','#f3da6b','#ca9ec7','#fdb9c0','#b5977a','#d0c4c0',
+      '#5fa2ce','#e9833c','#e76263','#80bfb5','#64b156','#e6c848','#b888a9','#fca6b0','#a5836c','#c8bdb9'
+    ];
+    let companyColorMap = {};
+
+    // ─── Login ───────────────────────────────────────────────────────────
+    async function doLogin() {
+      const email = document.getElementById('loginEmail').value.trim();
+      const password = document.getElementById('loginPassword').value;
+      const errorEl = document.getElementById('loginError');
+      const btn = document.getElementById('loginBtn');
+
+      if (!email || !password) {
+        errorEl.textContent = 'Ingresa email y contraseña';
+        errorEl.className = 'login-error show';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Ingresando...';
+      errorEl.className = 'login-error';
+
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          if (data.noAdmin) {
+            errorEl.textContent = '⚠️ Usuario sin permisos de administrador. Solo usuarios ADMIN pueden acceder.';
+            errorEl.className = 'login-error show no-admin';
+          } else {
+            errorEl.textContent = data.error || 'Error al iniciar sesión';
+            errorEl.className = 'login-error show';
+          }
+          btn.disabled = false;
+          btn.textContent = 'Ingresar';
+          return;
+        }
+
+        // Login exitoso
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('appContainer').style.display = 'block';
+        document.getElementById('userInfo').textContent = `${data.user.name} (${data.user.email})`;
+        loadAppData();
+      } catch (err) {
+        errorEl.textContent = 'Error de conexión';
+        errorEl.className = 'login-error show';
+        btn.disabled = false;
+        btn.textContent = 'Ingresar';
+      }
+    }
+
+    // ─── Logout ──────────────────────────────────────────────────────────
+    async function doLogout() {
+      await fetch('/api/logout', { method: 'POST' });
+      document.getElementById('appContainer').style.display = 'none';
+      document.getElementById('loginScreen').classList.remove('hidden');
+      document.getElementById('loginEmail').value = '';
+      document.getElementById('loginPassword').value = '';
+      document.getElementById('loginError').className = 'login-error';
+    }
+
+    // ─── Verificar sesión al cargar ──────────────────────────────────────
+    async function checkSession() {
+      try {
+        const res = await fetch('/api/session');
+        const data = await res.json();
+        if (data.authenticated) {
+          document.getElementById('loginScreen').classList.add('hidden');
+          document.getElementById('appContainer').style.display = 'block';
+          document.getElementById('userInfo').textContent = `${data.user.name} (${data.user.email})`;
+          loadAppData();
+        }
+      } catch (e) {
+        // Sin conexión, mostrar login
+      }
+    }
+
+    // ─── Cargar datos de la app ──────────────────────────────────────────
+    async function loadAppData() {
+      try {
+        const [usersRes, companiesRes] = await Promise.all([
+          fetch('/api/users'),
+          fetch('/api/companies'),
+        ]);
+
+        if (usersRes.status === 401) {
+          doLogout();
+          return;
+        }
+
+        const users = await usersRes.json();
+        const companies = await companiesRes.json();
+
+        const userSelect = document.getElementById('userSelect');
+        userSelect.innerHTML = '<option value="">Seleccione un usuario</option>';
+        users.forEach(u => {
+          const opt = document.createElement('option');
+          opt.value = u.email;
+          opt.textContent = `${u.name} (${u.email}) — ${u.company}`;
+          userSelect.appendChild(opt);
+        });
+
+        const companySelect = document.getElementById('companySelect');
+        companySelect.innerHTML = '<option value="todas">Todas las empresas</option>';
+        companies.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c;
+          opt.textContent = c;
+          companySelect.appendChild(opt);
+        });
+
+        const now = new Date();
+        const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        document.getElementById('startDate').value = firstOfMonth.toISOString().slice(0, 10);
+        document.getElementById('endDate').value = now.toISOString().slice(0, 10);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // ─── Búsqueda principal ──────────────────────────────────────────────
+    async function search() {
+      const user = document.getElementById('userSelect').value;
+      if (!user) {
+        alert('Por favor seleccione un usuario');
+        return;
+      }
+
+      const company = document.getElementById('companySelect').value;
+      const start = document.getElementById('startDate').value;
+      const end = document.getElementById('endDate').value;
+
+      if (!start || !end) {
+        alert('Por favor seleccione las fechas de inicio y fin');
+        return;
+      }
+
+      const loading = document.getElementById('loading');
+      const results = document.getElementById('results');
+      loading.classList.add('active');
+      results.style.display = 'none';
+
+      try {
+        const params = new URLSearchParams({ user, company, start, end });
+        const res = await fetch(`/api/hours?${params}`);
+
+        if (res.status === 401) {
+          doLogout();
+          return;
+        }
+
+        const data = await res.json();
+
+        if (data.error) {
+          alert('Error: ' + data.error);
+          return;
+        }
+
+        renderResults(data);
+        results.style.display = 'block';
+      } catch (err) {
+        alert('Error al consultar: ' + err.message);
+      } finally {
+        loading.classList.remove('active');
+      }
+    }
+
+    // ─── Renderizar resultados ──────────────────────────────────────────
+    function renderResults(data) {
+      // Summary cards
+      const summary = document.getElementById('summaryCards');
+      summary.innerHTML = `
+        <div class="card accent">
+          <div class="value">${data.totalHours}</div>
+          <div class="label">Total HH Registradas</div>
+        </div>
+        <div class="card">
+          <div class="value">${data.ticketsWithHours}</div>
+          <div class="label">Tickets con HH</div>
+        </div>
+        <div class="card">
+          <div class="value">${data.ticketsWorked}</div>
+          <div class="label">Tickets Trabajados</div>
+        </div>
+        <div class="card">
+          <div class="value">${data.hoursByCompany.length}</div>
+          <div class="label">Empresas</div>
+        </div>
+      `;
+
+      renderDonutChart(data);
+
+      // Chart: hours by period
+      renderPeriodChart(data);
+
+      // Chart: hours by priority
+      renderPriorityChart(data);
+
+      renderTicketsTable(data);
+
+      // Company summary table
+      const companyBody = document.getElementById('companyTableBody');
+      companyBody.innerHTML = data.hoursByCompany.map(c =>
+        `<tr><td>${escapeHtml(c.company)}</td><td><strong>${c.hours} HH</strong></td></tr>`
+      ).join('');
+
+      lastData = data;
+    }
+
+    // ─── Renderizar gráfico donut de empresas (interactivo) ─────────────
+    function renderDonutChart(data) {
+      if (chartCompany) chartCompany.destroy();
+      const ctx = document.getElementById('chartCompany').getContext('2d');
+
+      data.hoursByCompany.forEach((d, i) => {
+        companyColorMap[d.company] = COMPANY_PALETTE[i % COMPANY_PALETTE.length];
+      });
+
+      const bgColors = data.hoursByCompany.map(d =>
+        selectedCompany && d.company !== selectedCompany
+          ? '#e8e8e8'
+          : companyColorMap[d.company] || '#999'
+      );
+
+      chartCompany = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: data.hoursByCompany.map(d => d.company),
+          datasets: [{
+            data: data.hoursByCompany.map(d => d.hours),
+            backgroundColor: bgColors,
+            borderWidth: selectedCompany ? 2 : 0,
+            borderColor: data.hoursByCompany.map(d =>
+              d.company === selectedCompany ? companyColorMap[d.company] : 'transparent'
+            ),
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          cutout: '65%',
+          onClick: (event, activeElements) => {
+            if (activeElements.length > 0) {
+              const idx = activeElements[0].index;
+              const company = data.hoursByCompany[idx].company;
+              selectedCompany = selectedCompany === company ? null : company;
+            } else {
+              selectedCompany = null;
+            }
+            renderDonutChart(data);
+            renderPeriodChart(lastData);
+            renderTicketsTable(lastData);
+          },
+          plugins: {
+            legend: { position: 'right', labels: { font: { size: 12 } } },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.label}: ${ctx.raw} HH`,
+              }
+            }
+          }
+        },
+        plugins: [{
+          id: 'centerText',
+          beforeDraw(chart) {
+            const {width, height, ctx} = chart;
+            ctx.save();
+            const text = selectedCompany || 'Todas';
+            ctx.font = 'bold 13px sans-serif';
+            ctx.fillStyle = selectedCompany ? '#1a1a2e' : '#888';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, width / 2, height / 2);
+            ctx.restore();
+          }
+        }]
+      });
+    }
+
+    // ─── Renderizar tabla de tickets (con filtro por empresa) ───────────
+    function renderTicketsTable(data) {
+      let tickets = data.hoursByTicket;
+      if (selectedCompany) {
+        tickets = tickets.filter(t => t.company === selectedCompany);
+      }
+      const tbody = document.getElementById('ticketsTableBody');
+      tbody.innerHTML = tickets.map(t => `
+        <tr>
+          <td><a class="ticket-link" onclick="showTicket('${t.ticketNumber}')">#${t.ticketNumber}</a></td>
+          <td>${escapeHtml(t.title || '').substring(0, 60)}</td>
+          <td>${escapeHtml(t.company)}</td>
+          <td>${escapeHtml(t.system || '—')}</td>
+          <td><span class="badge ${(t.status || '').toLowerCase()}">${escapeHtml(t.status)}</span></td>
+          <td>${t.priority ? `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${t.priorityColor};margin-right:4px;"></span>${escapeHtml(t.priority)}
+          ` : '<span style="color:#bbb">—</span>'}</td>
+          <td><strong>${t.totalHours} HH</strong></td>
+          <td class="comment-cell">
+            ${t.comments.slice(0, 3).map(c =>
+              `<div class="comment-item">
+                <span class="hh">+${c.hours} HH</span>
+                ${new Date(c.date).toLocaleDateString()}<br>
+                ${escapeHtml(c.message.substring(0, 100))}${c.message.length > 100 ? '...' : ''}
+              </div>`
+            ).join('')}
+            ${t.comments.length > 3 ? `<div style="color:#888;font-size:11px;">+${t.comments.length - 3} comentarios más</div>` : ''}
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // ─── Renderizar gráfico de período (con filtro por empresa) ─────────
+    function renderPeriodChart(data) {
+      // Filtrar hoursByDay si hay empresa seleccionada
+      let filteredDayHours = data.hoursByDay;
+      if (selectedCompany) {
+        // Reconstruir desde los tickets filtrados
+        const dayTotals = {};
+        const filteredTickets = data.hoursByTicket.filter(t => t.company === selectedCompany);
+        filteredTickets.forEach(t => {
+          t.comments.forEach(c => {
+            const day = c.date.slice(0, 10);
+            dayTotals[day] = (dayTotals[day] || 0) + c.hours;
+          });
+        });
+        filteredDayHours = Object.entries(dayTotals)
+          .map(([date, hours]) => ({ date, hours: Math.round(hours * 100) / 100 }))
+          .sort((a, b) => a.date.localeCompare(b.date));
+      }
+
+      const periodType = document.getElementById('periodType').value;
+      let labels, values;
+      if (periodType === 'week') {
+        const grouped = {};
+        filteredDayHours.forEach(d => {
+          const date = new Date(d.date);
+          const weekStart = new Date(date);
+          weekStart.setDate(date.getDate() - date.getDay());
+          const key = weekStart.toISOString().slice(0, 10);
+          grouped[key] = (grouped[key] || 0) + d.hours;
+        });
+        labels = Object.keys(grouped).sort();
+        values = labels.map(k => Math.round(grouped[k] * 100) / 100);
+        labels = labels.map(k => `Sem ${k}`);
+      } else if (periodType === 'month') {
+        const grouped = {};
+        filteredDayHours.forEach(d => {
+          const key = d.date.slice(0, 7);
+          grouped[key] = (grouped[key] || 0) + d.hours;
+        });
+        labels = Object.keys(grouped).sort();
+        values = labels.map(k => Math.round(grouped[k] * 100) / 100);
+      } else {
+        labels = filteredDayHours.map(d => d.date);
+        values = filteredDayHours.map(d => d.hours);
+      }
+
+      // Color: si hay empresa seleccionada, usar su color
+      const barColor = selectedCompany
+        ? (companyColorMap[selectedCompany] || '#4e79a7')
+        : '#4e79a7';
+
+      if (chartPeriod) chartPeriod.destroy();
+      const ctxPeriod = document.getElementById('chartPeriod').getContext('2d');
+      chartPeriod = new Chart(ctxPeriod, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'HH',
+            data: values,
+            backgroundColor: barColor,
+            borderRadius: 4,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true, ticks: { precision: 0 } },
+            x: { ticks: { maxRotation: 45, font: { size: 10 } } }
+          }
+        }
+      });
+    }
+
+    // ─── Redibujar el gráfico al cambiar agrupación ──────────────────────
+    function redrawPeriodChart() {
+      if (lastData) {
+        renderPeriodChart(lastData);
+      }
+    }
+
+    // ─── Gráfico de prioridades ───────────────────────────────────────────
+    function renderPriorityChart(data) {
+      if (!data.hoursByPriority) return;
+      if (chartPriority) chartPriority.destroy();
+      const ctx = document.getElementById('chartPriority').getContext('2d');
+      chartPriority = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: data.hoursByPriority.map(d => d.label),
+          datasets: [{
+            data: data.hoursByPriority.map(d => d.hours),
+            backgroundColor: data.hoursByPriority.map(d => d.color),
+            borderWidth: 2,
+            borderColor: '#fff',
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          cutout: '55%',
+          plugins: {
+            legend: { position: 'right', labels: { font: { size: 12 } } },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.label}: ${ctx.raw} HH`,
+              }
+            }
+          }
+        },
+        plugins: [{
+          id: 'priorityCenter',
+          beforeDraw(chart) {
+            const {width, height, ctx} = chart;
+            const total = data.hoursByPriority.reduce((s, d) => s + d.hours, 0);
+            ctx.save();
+            ctx.font = 'bold 18px sans-serif';
+            ctx.fillStyle = '#1a1a2e';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(total + ' HH', width / 2, height / 2);
+            ctx.restore();
+          }
+        }]
+      });
+    }
+
+    // ─── Switch de secciones del menú lateral ────────────────────────────
+    function switchSection(section) {
+      document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+      if (section === 'horas') {
+        document.querySelector('.sidebar-item:nth-child(1)').classList.add('active');
+        document.getElementById('horasSection').style.display = 'block';
+        document.getElementById('excelSection').style.display = 'none';
+      } else if (section === 'excel') {
+        document.querySelector('.sidebar-item:nth-child(2)').classList.add('active');
+        document.getElementById('horasSection').style.display = 'none';
+        document.getElementById('excelSection').style.display = 'block';
+      }
+    }
+
+    // ─── Modal detalle de ticket ─────────────────────────────────────────
+    async function showTicket(ticketNumber) {
+      try {
+        const res = await fetch(`/api/ticket/${ticketNumber}`);
+        const ticket = await res.json();
+
+        document.getElementById('modalTitle').textContent = `Ticket #${ticket.ticketNumber}`;
+
+        let body = `
+          <div class="modal-section">
+            <h4>Información General</h4>
+            <table style="font-size:13px;">
+              <tr><td><strong>Título:</strong></td><td>${escapeHtml(ticket.title)}</td></tr>
+              <tr><td><strong>Empresa:</strong></td><td>${escapeHtml(ticket.company)}</td></tr>
+              <tr><td><strong>Sistema:</strong></td><td>${escapeHtml(ticket.system || '—')}</td></tr>
+              <tr><td><strong>Estado:</strong></td><td><span class="badge ${(ticket.status || '').toLowerCase()}">${escapeHtml(ticket.status)}</span></td></tr>
+              <tr><td><strong>Asignado a:</strong></td><td>${escapeHtml(ticket.assignedTo)}</td></tr>
+              <tr><td><strong>Reportado por:</strong></td><td>${escapeHtml(ticket.reportedBy?.name || '—')}</td></tr>
+              <tr><td><strong>Fecha creación:</strong></td><td>${new Date(ticket.date).toLocaleString()}</td></tr>
+              <tr><td><strong>Tag:</strong></td><td>${escapeHtml(ticket.tag || '—')}</td></tr>
+            </table>
+          </div>
+          <div class="modal-section">
+            <h4>Descripción</h4>
+            <p style="font-size:13px;white-space:pre-wrap;">${escapeHtml(ticket.message || 'Sin descripción')}</p>
+          </div>
+          <div class="modal-section">
+            <h4>Comentarios y Horas (${ticket.comments.length})</h4>
+        `;
+
+        ticket.comments.forEach(c => {
+          const hrs = c.hours ? `<span class="hh">+${c.hours} HH</span>` : '';
+          body += `
+            <div class="modal-comment">
+              <div class="meta">${new Date(c.date).toLocaleString()} — ${escapeHtml(c.createdBy)} ${hrs}</div>
+              <div style="white-space:pre-wrap;">${escapeHtml(c.message || '')}</div>
+              ${c.hasFile ? `<div style="font-size:11px;color:#888;margin-top:4px;">📎 ${escapeHtml(c.fileName)}</div>` : ''}
+            </div>
+          `;
+        });
+
+        body += `
+          </div>
+          <div class="modal-section">
+            <h4>Historial de Cambios de Estado (${ticket.statusChanges?.length || 0})</h4>
+        `;
+
+        if (ticket.statusChanges) {
+          ticket.statusChanges.forEach(sc => {
+            body += `
+              <div class="modal-comment" style="background:#fff;">
+                <div class="meta">${new Date(sc.date).toLocaleString()} — por ${escapeHtml(sc.modifiedBy)}</div>
+                <div>Estado → <span class="badge ${(sc.status || '').toLowerCase()}">${escapeHtml(sc.status)}</span></div>
+              </div>
+            `;
+          });
+        }
+
+        body += '</div>';
+
+        document.getElementById('modalBody').innerHTML = body;
+        document.getElementById('modalOverlay').classList.add('active');
+      } catch (err) {
+        alert('Error al cargar ticket: ' + err.message);
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('modalOverlay').classList.remove('active');
+    }
+    document.getElementById('modalOverlay').addEventListener('click', e => {
+      if (e.target === e.currentTarget) closeModal();
+    });
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // ─── Init ────────────────────────────────────────────────────────────
+    checkSession();
+
+    // Enter key: login (si está en login) o search (si está en app)
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        if (!document.getElementById('loginScreen').classList.contains('hidden')) {
+          if (e.target.id === 'loginEmail' || e.target.id === 'loginPassword') doLogin();
+        } else if (e.target.tagName !== 'TEXTAREA') {
+          search();
+        }
+      }
+    });
+  </script>
+</body>
+</html>
