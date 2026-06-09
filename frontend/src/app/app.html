@@ -1,0 +1,46 @@
+@if (!isLoginPage()) {
+<div class="app-layout">
+  <div class="sidebar">
+    <div class="sidebar-logo">
+      <h2>NXSupport</h2>
+      <p>Visor de Horas</p>
+    </div>
+    <div class="sidebar-menu">
+      <div class="sidebar-item" [class.active]="router.url === '/horas'" (click)="goTo('/horas')">
+        <span class="icon">📊</span> Análisis de Horas
+      </div>
+      <div class="sidebar-item" [class.active]="router.url === '/excel'" (click)="goTo('/excel')">
+        <span class="icon">📋</span> Excel Elecmetal
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      @if (auth.user()) {
+      <div style="margin-bottom: 8px">
+        <div style="font-size: 13px; color: white; font-weight: 600">{{ auth.user()!.name }}</div>
+        <div style="font-size: 11px; opacity: 0.6">{{ auth.user()!.email }}</div>
+      </div>
+      }
+      <button
+        style="
+          background: rgba(255, 255, 255, 0.1);
+          color: white;
+          border: none;
+          border-radius: 6px;
+          padding: 6px 14px;
+          font-size: 12px;
+          cursor: pointer;
+          width: 100%;
+        "
+        (click)="logout()"
+      >
+        Cerrar Sesión
+      </button>
+    </div>
+  </div>
+  <div class="main-area">
+    <router-outlet />
+  </div>
+</div>
+} @else {
+<router-outlet />
+}
