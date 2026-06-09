@@ -608,9 +608,18 @@
         </div>
 
         <!-- Tabla comparativa -->
-        <div class="table-section">
-          <h3>📋 Comparación Estimación vs Horas Reales</h3>
-          <table>
+          <div class="table-section">
+            <h3 style="display:flex;justify-content:space-between;align-items:center;">
+              📋 Comparación Estimación vs Horas Reales
+              <select id="filtroResultado" onchange="filtrarTablaComparacion()" style="font-size:12px;padding:4px 8px;border:1px solid #d0d5dd;border-radius:6px;background:white;">
+                <option value="todas">Todas las categorías</option>
+                <option value="dentro">✅ Dentro</option>
+                <option value="excedido">⚠️ Excedido</option>
+                <option value="en_validacion">🟡 En validación</option>
+                <option value="sin_datos">❓ Sin datos</option>
+              </select>
+            </h3>
+            <table>
             <thead>
               <tr>
                 <th>Ticket</th>
@@ -1375,6 +1384,29 @@
       document.getElementById('estadoTableBody').innerHTML = data.por_estado.map(e =>
         `<tr><td>${escapeHtml(e.estado || '—')}</td><td>${e.cantidad}</td><td>${e.promedio_horas || '—'}</td></tr>`
       ).join('');
+    }
+
+    // ─── Filtro de tabla comparación ───────────────────────────────────
+    function filtrarTablaComparacion() {
+      const filtro = document.getElementById('filtroResultado').value;
+      const data = window._excelData || [];
+      const filtered = filtro === 'todas' ? data : data.filter(t => t.categoria === filtro);
+      const colorMap = { dentro: '#2ecc71', excedido: '#e74c3c', en_validacion: '#f39c12', sin_datos: '#95a5a6' };
+      const labelMap = { dentro: '✅ Dentro', excedido: '⚠️ Excedido', en_validacion: '🟡 En validación', sin_datos: '❓ Sin datos' };
+      document.getElementById('comparacionTableBody').innerHTML = filtered.map((t, i) => {
+        const cls = colorMap[t.categoria] || '#95a5a6';
+        const globalIdx = data.indexOf(t);
+        return `<tr style="cursor:pointer;" onclick="showExcelTicketDetail(window._excelData[${globalIdx}])">
+          <td>${escapeHtml(t.ticket_ref || '')}</td>
+          <td>${escapeHtml(t.a_cargo_de || '—')}</td>
+          <td>${escapeHtml(t.estado || '—')}</td>
+          <td>${escapeHtml(t.prioridad || '—')}</td>
+          <td>${t.horas_estimadas || '—'}</td>
+          <td><strong>${t.horas_reales !== null ? t.horas_reales : '—'}</strong></td>
+          <td>${t.desviacion_pct !== null ? t.desviacion_pct + '%' : '—'}</td>
+          <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${cls};margin-right:4px;"></span>${labelMap[t.categoria] || '❓ Sin datos'}</td>
+        </tr>`;
+      }).join('');
     }
 
     // ─── Modal detalle de ticket desde Excel ────────────────────────────
