@@ -53,10 +53,9 @@
     }
     .sidebar-item .icon { font-size: 18px; }
     .sidebar-footer {
-      padding: 16px 20px;
+      padding: 12px 20px;
       border-top: 1px solid rgba(255,255,255,0.1);
       font-size: 12px;
-      opacity: 0.5;
     }
 
     /* ─── Main ─── */
@@ -438,8 +437,9 @@
         </div>
       </div>
       <div class="sidebar-footer">
-        <div id="userInfo" style="opacity:0.8;margin-bottom:8px;"></div>
-        <button onclick="doLogout()" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:white;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;">Cerrar sesión</button>
+        <div id="userInfo" style="opacity:0.8;font-size:13px;cursor:pointer;" onclick="toggleUserDetail()" title="Haz clic para ver detalles"></div>
+        <div id="userDetail" style="font-size:11px;opacity:0;max-height:0;overflow:hidden;transition:all 0.2s ease;"></div>
+        <button onclick="doLogout()" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:white;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;margin-top:6px;">Cerrar sesión</button>
       </div>
     </div>
 
@@ -606,13 +606,31 @@
         // Login exitoso
         document.getElementById('loginScreen').classList.add('hidden');
         document.getElementById('appContainer').style.display = 'flex';
-        document.getElementById('userInfo').textContent = `${data.user.name} (${data.user.email})`;
+        document.getElementById('userInfo').textContent = data.user.name;
+        document.getElementById('userInfo').dataset.email = data.user.email;
+        document.getElementById('userInfo').dataset.roles = data.user.roles.join(', ');
         loadAppData();
       } catch (err) {
         errorEl.textContent = 'Error de conexión';
         errorEl.className = 'login-error show';
         btn.disabled = false;
         btn.textContent = 'Ingresar';
+      }
+    }
+
+    // ─── Toggle detalle del usuario en sidebar ─────────────────────────
+    function toggleUserDetail() {
+      const el = document.getElementById('userInfo');
+      const detail = document.getElementById('userDetail');
+      const email = el.dataset.email;
+      const roles = el.dataset.roles;
+      if (detail.style.opacity === '1') {
+        detail.style.opacity = '0';
+        detail.style.maxHeight = '0';
+      } else {
+        detail.textContent = `${email}${roles ? ` — ${roles}` : ''}`;
+        detail.style.opacity = '1';
+        detail.style.maxHeight = '60px';
       }
     }
 
@@ -634,7 +652,9 @@
         if (data.authenticated) {
           document.getElementById('loginScreen').classList.add('hidden');
           document.getElementById('appContainer').style.display = 'flex';
-          document.getElementById('userInfo').textContent = `${data.user.name} (${data.user.email})`;
+          document.getElementById('userInfo').textContent = data.user.name;
+          document.getElementById('userInfo').dataset.email = data.user.email;
+          document.getElementById('userInfo').dataset.roles = data.user.roles.join(', ');
           loadAppData();
         }
       } catch (e) {
