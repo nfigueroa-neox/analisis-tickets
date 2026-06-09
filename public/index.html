@@ -1278,6 +1278,10 @@
           <div class="value">${r.excedido || 0}</div>
           <div class="label">⚠️ Excedido</div>
         </div>
+        <div class="card">
+          <div class="value">${r.en_validacion || 0}</div>
+          <div class="label">🟡 En Validación</div>
+        </div>
       `;
 
       // Chart: estimación vs reales (barras)
@@ -1305,17 +1309,17 @@
 
       // Chart: cumplimiento (donut)
       if (chartCumplimiento) chartCumplimiento.destroy();
+      const validacion = data.comparacion.filter(t => t.categoria === 'en_validacion').length;
+      const dentro = data.comparacion.filter(t => t.categoria === 'dentro').length;
+      const excedido = data.comparacion.filter(t => t.categoria === 'excedido').length;
+      const sinDatos = data.comparacion.filter(t => t.categoria === 'sin_datos').length;
       chartCumplimiento = new Chart(document.getElementById('chartCumplimiento'), {
         type: 'doughnut',
         data: {
-          labels: ['✅ Dentro estimación', '⚠️ Excedido', '❓ Sin datos'],
+          labels: ['✅ Dentro', '⚠️ Excedido', '🟡 En validación', '❓ Sin datos'],
           datasets: [{
-            data: [
-              r.dentro_estimacion || 0,
-              r.excedido || 0,
-              (r.total_con_estimacion - (r.dentro_estimacion || 0) - (r.excedido || 0))
-            ],
-            backgroundColor: ['#2ecc71', '#e74c3c', '#95a5a6'],
+            data: [dentro, excedido, validacion, sinDatos],
+            backgroundColor: ['#2ecc71', '#e74c3c', '#f39c12', '#95a5a6'],
           }]
         },
         options: { responsive: true, cutout: '60%', plugins: { legend: { position: 'right' } } }
@@ -1339,7 +1343,9 @@
       // Tabla comparación (con click en fila)
       window._excelData = data.comparacion;
       document.getElementById('comparacionTableBody').innerHTML = data.comparacion.map((t, i) => {
-        const cls = t.categoria === 'dentro' ? '#2ecc71' : t.categoria === 'excedido' ? '#e74c3c' : '#95a5a6';
+        const colorMap = { dentro: '#2ecc71', excedido: '#e74c3c', en_validacion: '#f39c12', sin_datos: '#95a5a6' };
+        const labelMap = { dentro: '✅ Dentro', excedido: '⚠️ Excedido', en_validacion: '🟡 En validación', sin_datos: '❓ Sin datos' };
+        const cls = colorMap[t.categoria] || '#95a5a6';
         return `<tr style="cursor:pointer;" onclick="showExcelTicketDetail(window._excelData[${i}])">
           <td>${escapeHtml(t.ticket_ref || '')}</td>
           <td>${escapeHtml(t.a_cargo_de || '—')}</td>
@@ -1348,7 +1354,7 @@
           <td>${t.horas_estimadas || '—'}</td>
           <td><strong>${t.horas_reales !== null ? t.horas_reales : '—'}</strong></td>
           <td>${t.desviacion_pct !== null ? t.desviacion_pct + '%' : '—'}</td>
-          <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${cls};margin-right:4px;"></span>${t.categoria === 'dentro' ? '✅ Dentro' : t.categoria === 'excedido' ? '⚠️ Excedido' : '❓ Sin datos'}</td>
+          <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${cls};margin-right:4px;"></span>${labelMap[t.categoria] || '❓ Sin datos'}</td>
         </tr>`;
       }).join('');
 

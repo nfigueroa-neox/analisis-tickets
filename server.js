@@ -730,21 +730,25 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
         desviacion_pct: t.horas_estimadas > 0 && reales !== null
           ? Math.round(((t.horas_estimadas - reales) / t.horas_estimadas) * 100 * 10) / 10
           : null,
-        categoria: t.horas_estimadas > 0 && reales !== null
-          ? (reales <= t.horas_estimadas ? "dentro" : "excedido")
-          : "sin_datos",
+        categoria: (() => {
+          if (!t.horas_estimadas > 0 || reales === null) return "sin_datos";
+          if (t.estado && /validaci/i.test(t.estado)) return "en_validacion";
+          return reales <= t.horas_estimadas ? "dentro" : "excedido";
+        })(),
       };
     });
 
     const conReales = comparacion.filter(t => t.horas_reales !== null);
     const dentro = conReales.filter(t => t.categoria === "dentro");
     const excedido = conReales.filter(t => t.categoria === "excedido");
+    const enValidacion = comparacion.filter(t => t.categoria === "en_validacion");
 
     const resumen = {
       total_con_estimacion: tickets.length,
       total_con_reales: conReales.length,
       dentro_estimacion: dentro.length,
       excedido: excedido.length,
+      en_validacion: enValidacion.length,
       promedio_horas_reales: conReales.length
         ? Math.round(conReales.reduce((s, t) => s + t.horas_reales, 0) / conReales.length * 10) / 10
         : 0,
