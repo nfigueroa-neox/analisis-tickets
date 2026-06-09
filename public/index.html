@@ -656,6 +656,15 @@
           </table>
         </div>
       </div>
+
+      <!-- Modal Excel (dentro de excelSection) -->
+      <div class="modal-overlay" id="excelModalOverlay">
+        <div class="modal">
+          <button class="modal-close" onclick="document.getElementById('excelModalOverlay').classList.remove('active')">&times;</button>
+          <h2 id="excelModalTitle">Detalle del Ticket</h2>
+          <div id="excelModalBody"></div>
+        </div>
+      </div>
     </div>
 
     </div><!-- /main-area -->
@@ -1283,7 +1292,15 @@
             { label: 'HH Reales', data: comp.map(t => t.horas_reales), backgroundColor: '#f28e2b', borderRadius: 4 },
           ]
         },
-        options: { responsive: true, plugins: { legend: { position: 'top' } } }
+        options: {
+          responsive: true,
+          onClick: function(e, item) {
+            if (item && item.length > 0 && item[0].index < comp.length) {
+              showExcelTicketDetail(comp[item[0].index]);
+            }
+          },
+          plugins: { legend: { position: 'top' } }
+        }
       });
 
       // Chart: cumplimiento (donut)
@@ -1319,10 +1336,11 @@
         options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
       });
 
-      // Tabla comparación
-      document.getElementById('comparacionTableBody').innerHTML = data.comparacion.map(t => {
+      // Tabla comparación (con click en fila)
+      window._excelData = data.comparacion;
+      document.getElementById('comparacionTableBody').innerHTML = data.comparacion.map((t, i) => {
         const cls = t.categoria === 'dentro' ? '#2ecc71' : t.categoria === 'excedido' ? '#e74c3c' : '#95a5a6';
-        return `<tr>
+        return `<tr style="cursor:pointer;" onclick="showExcelTicketDetail(window._excelData[${i}])">
           <td>${escapeHtml(t.ticket_ref || '')}</td>
           <td>${escapeHtml(t.a_cargo_de || '—')}</td>
           <td>${escapeHtml(t.estado || '—')}</td>
@@ -1351,6 +1369,27 @@
       document.getElementById('estadoTableBody').innerHTML = data.por_estado.map(e =>
         `<tr><td>${escapeHtml(e.estado || '—')}</td><td>${e.cantidad}</td><td>${e.promedio_horas || '—'}</td></tr>`
       ).join('');
+    }
+
+    // ─── Modal detalle de ticket desde Excel ────────────────────────────
+    function showExcelTicketDetail(ticket) {
+      document.getElementById('excelModalTitle').textContent = 'Ticket ' + (ticket.ticket_ref || '');
+      const color = ticket.prioridad === 'Mayor' || ticket.prioridad === 'Crítica' ? '#e74c3c' : ticket.prioridad === 'Media' ? '#f1c40f' : '#2ecc71';
+      document.getElementById('excelModalBody').innerHTML = `
+        <div class="modal-section">
+          <table style="font-size:13px;">
+            <tr><td><strong>Título:</strong></td><td>${escapeHtml(ticket.title || '')}</td></tr>
+            <tr><td><strong>Responsable:</strong></td><td>${escapeHtml(ticket.a_cargo_de || '—')}</td></tr>
+            <tr><td><strong>Estado:</strong></td><td><span class="badge ${(ticket.estado || '').toLowerCase()}">${escapeHtml(ticket.estado)}</span></td></tr>
+            <tr><td><strong>Prioridad:</strong></td><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};margin-right:4px;"></span>${escapeHtml(ticket.prioridad)}</td></tr>
+            <tr><td><strong>HH Estimadas:</strong></td><td>${ticket.horas_estimadas || '—'}</td></tr>
+            <tr><td><strong>HH Reales:</strong></td><td><strong>${ticket.horas_reales !== null ? ticket.horas_reales : '—'}</strong></td></tr>
+            <tr><td><strong>Desviación:</strong></td><td>${ticket.desviacion_pct !== null ? ticket.desviacion_pct + '%' : '—'}</td></tr>
+            <tr><td><strong>Resultado:</strong></td><td>${ticket.categoria === 'dentro' ? '✅ Dentro' : ticket.categoria === 'excedido' ? '⚠️ Excedido' : '❓ Sin datos'}</td></tr>
+          </table>
+        </div>
+      `;
+      document.getElementById('excelModalOverlay').classList.add('active');
     }
 
     // ─── Modal detalle de ticket ─────────────────────────────────────────
