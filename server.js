@@ -159,8 +159,9 @@ function getPgPool() {
       pgPool = new Pool({
         connectionString: SUPABASE_URL,
         ssl: { rejectUnauthorized: false },
+        family: 6, // Forzar IPv6 (Supabase solo tiene AAAA)
       });
-      console.log("Supabase pool listo");
+      console.log("Supabase pool listo (IPv6)");
     }
   }
   return pgPool;
