@@ -1305,7 +1305,7 @@
             {
               label: 'HH Reales',
               data: comp.map(t => t.horas_reales),
-              backgroundColor: comp.map(t => t.categoria === 'en_validacion' ? '#f39c12' : '#f28e2b'),
+              backgroundColor: comp.map(t => t.categoria === 'en_validacion' ? '#ffd700' : '#e15759'),
               borderRadius: 4,
             },
           ]
@@ -1324,8 +1324,8 @@
                 generateLabels: function(chart) {
                   return [
                     { text: 'HH Estimadas', fillStyle: '#4e79a7' },
-                    { text: 'HH Reales', fillStyle: '#f28e2b' },
-                    { text: 'HH Reales (en validación)', fillStyle: '#f39c12' },
+                    { text: 'HH Reales', fillStyle: '#e15759' },
+                    { text: 'HH Reales (en validación)', fillStyle: '#ffd700' },
                   ];
                 }
               }
@@ -1346,7 +1346,7 @@
           labels: ['✅ Dentro', '⚠️ Excedido', '🟡 En validación', '❓ Sin datos'],
           datasets: [{
             data: [dentro, excedido, validacion, sinDatos],
-            backgroundColor: ['#2ecc71', '#e74c3c', '#f39c12', '#95a5a6'],
+            backgroundColor: ['#2ecc71', '#e74c3c', '#ffd700', '#95a5a6'],
           }]
         },
         options: { responsive: true, cutout: '60%', plugins: { legend: { position: 'right' } } }
@@ -1370,7 +1370,7 @@
       // Tabla comparación (con click en fila)
       window._excelData = data.comparacion;
       document.getElementById('comparacionTableBody').innerHTML = data.comparacion.map((t, i) => {
-        const colorMap = { dentro: '#2ecc71', excedido: '#e74c3c', en_validacion: '#f39c12', sin_datos: '#95a5a6' };
+        const colorMap = { dentro: '#2ecc71', excedido: '#e74c3c', en_validacion: '#ffd700', sin_datos: '#95a5a6' };
         const labelMap = { dentro: '✅ Dentro', excedido: '⚠️ Excedido', en_validacion: '🟡 En validación', sin_datos: '❓ Sin datos' };
         const cls = colorMap[t.categoria] || '#95a5a6';
         return `<tr style="cursor:pointer;" onclick="showExcelTicketDetail(window._excelData[${i}])">
@@ -1409,7 +1409,7 @@
       const filtro = document.getElementById('filtroResultado').value;
       const data = window._excelData || [];
       const filtered = filtro === 'todas' ? data : data.filter(t => t.categoria === filtro);
-      const colorMap = { dentro: '#2ecc71', excedido: '#e74c3c', en_validacion: '#f39c12', sin_datos: '#95a5a6' };
+      const colorMap = { dentro: '#2ecc71', excedido: '#e74c3c', en_validacion: '#ffd700', sin_datos: '#95a5a6' };
       const labelMap = { dentro: '✅ Dentro', excedido: '⚠️ Excedido', en_validacion: '🟡 En validación', sin_datos: '❓ Sin datos' };
       document.getElementById('comparacionTableBody').innerHTML = filtered.map((t, i) => {
         const cls = colorMap[t.categoria] || '#95a5a6';
