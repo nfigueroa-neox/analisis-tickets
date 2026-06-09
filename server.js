@@ -152,19 +152,32 @@ function parseUserEmail(commentaryBy) {
 const { Pool } = require("pg");
 let pgPool = null;
 
-function getPgPool() {
-  if (!pgPool) {
+let pgPoolPromise = null;
+async function getPgPool() {
+  if (!pgPoolPromise) {
     const SUPABASE_URL = process.env.SUPABASE_URL;
-    if (SUPABASE_URL) {
-      pgPool = new Pool({
-        connectionString: SUPABASE_URL,
+    if (!SUPABASE_URL) return null;
+
+    pgPoolPromise = (async () => {
+      const dns = require("dns");
+      const url = new URL(SUPABASE_URL);
+      const hostname = url.hostname;
+      // Resolver IPv6 manualmente (Supabase solo tiene AAAA)
+      const addresses = await dns.promises.resolve6(hostname);
+      const ipv6 = addresses[0];
+      console.log("Supabase IPv6:", ipv6);
+      // Reemplazar hostname por IP literal
+      const connStr = SUPABASE_URL.replace(hostname, `[${ipv6}]`);
+
+      const pool = new Pool({
+        connectionString: connStr,
         ssl: { rejectUnauthorized: false },
-        family: 6, // Forzar IPv6 (Supabase solo tiene AAAA)
+        connectionTimeoutMillis: 10000,
       });
-      console.log("Supabase pool listo (IPv6)");
-    }
+      return pool;
+    })();
   }
-  return pgPool;
+  return pgPoolPromise;
 }
 
 // ─── Multer (subida de archivos) ────────────────────────────────────────────
