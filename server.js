@@ -581,49 +581,52 @@ app.post("/api/excel/upload", requireAdmin, upload.single("file"), async (req, r
     const headers = data[0];
     const rows = data.slice(1);
 
+    const empresa = req.body.empresa || "Elecmetal";
+
     // 1. Obtener todos los ticket_ref existentes de una sola vez
-    const { data: existentes } = await supabase
-      .from("tickets_elecmetal")
-      .select("ticket_ref");
-    const refsExistentes = new Set((existentes || []).map(r => r.ticket_ref));
+  const { data: existentes } = await supabase
+    .from("tickets_elecmetal")
+    .select("ticket_ref");
+  const refsExistentes = new Set((existentes || []).map(r => r.ticket_ref));
 
-    const nuevos = [];
-    let actualizados = 0;
+  const nuevos = [];
+  let actualizados = 0;
 
-    for (const row of rows) {
-      const title = (row[0] || "").toString().trim();
-      if (!title) continue;
-      const ticketRef = title.match(/#\d+/)?.[0] || null;
-      if (!ticketRef) continue;
+  for (const row of rows) {
+    const title = (row[0] || "").toString().trim();
+    if (!title) continue;
+    const ticketRef = title.match(/#\d+/)?.[0] || null;
+    if (!ticketRef) continue;
 
-      const horasDiarias = {};
-      for (let i = 12; i < headers.length; i++) {
-        const h = headers[i];
-        if (h && !h.toString().startsWith("__EMPTY") && row[i] !== null && row[i] !== "") {
-          const val = parseFloat(row[i]);
-          if (!isNaN(val) && val > 0) horasDiarias[h.toString().trim()] = val;
-        }
+    const horasDiarias = {};
+    for (let i = 12; i < headers.length; i++) {
+      const h = headers[i];
+      if (h && !h.toString().startsWith("__EMPTY") && row[i] !== null && row[i] !== "") {
+        const val = parseFloat(row[i]);
+        if (!isNaN(val) && val > 0) horasDiarias[h.toString().trim()] = val;
       }
+    }
 
-      const record = {
-        ticket_ref: ticketRef,
-        title,
-        estado: row[4] || null,
-        a_cargo_de: row[5] || null,
-        prioridad: row[6] || null,
-        tipo: row[7] || null,
-        horas_estimadas: parseFloat(row[8]) || null,
-        horas_reales: parseFloat(row[9]) || null,
-        vb_george: row[10] || null,
-        se_aplica_en: row[11] || null,
-        horas_diarias: horasDiarias,
-        avance: parseFloat(row[row.length - 3]) || null,
-        responsable_validacion: row[row.length - 2] || null,
-        avance_semana_anterior: parseFloat(row[row.length - 1]) || null,
-      };
-      if (row[1]) try { record.fecha_creacion = new Date(row[1]).toISOString(); } catch (e) {}
-      if (row[2]) try { record.cambio_estado = new Date(row[2]).toISOString(); } catch (e) {}
-      if (row[3] !== null && row[3] !== "") record.dias = parseInt(row[3]) || null;
+    const record = {
+      empresa,
+      ticket_ref: ticketRef,
+      title,
+      estado: row[4] || null,
+      a_cargo_de: row[5] || null,
+      prioridad: row[6] || null,
+      tipo: row[7] || null,
+      horas_estimadas: parseFloat(row[8]) || null,
+      horas_reales: parseFloat(row[9]) || null,
+      vb_george: row[10] || null,
+      se_aplica_en: row[11] || null,
+      horas_diarias: horasDiarias,
+      avance: parseFloat(row[row.length - 3]) || null,
+      responsable_validacion: row[row.length - 2] || null,
+      avance_semana_anterior: parseFloat(row[row.length - 1]) || null,
+    };
+    if (row[1]) try { record.fecha_creacion = new Date(row[1]).toISOString(); } catch (e) {}
+    if (row[2]) try { record.cambio_estado = new Date(row[2]).toISOString(); } catch (e) {}
+    if (row[3] !== null && row[3] !== "") record.dias = parseInt(row[3]) || null;
 
       if (refsExistentes.has(ticketRef)) {
         // Ya existe: actualizar uno por uno pero con timeout reducido
@@ -664,13 +667,22 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
     const supabase = getSupabase();
     if (!supabase) return res.json({ error: "Supabase no configurado" });
 
-    // Obtener todos los tickets con estimación
-    const { data: tickets, error } = await supabase
+    const empresa = req.query.empresa || "Elecmetal";
+    const inicio = req.query.inicio || "2000-01-01";
+    const fin = req.query.fin || "2099-12-31";
+
+    // Obtener todos los tickets con estimación, filtrados por empresa y fecha
+    let query = supabase
       .from("tickets_elecmetal")
       .select("*")
+      .eq("empresa", empresa)
       .not("horas_estimadas", "is", null)
-      .gt("horas_estimadas", 0)
-      .order("horas_estimadas", { ascending: false });
+      .gt("horas_estimadas", 0);
+
+    // Filtrar por fecha de creación si el campo existe
+    query = query.gte("fecha_creacion", inicio).lte("fecha_creacion", fin);
+
+    const { data: tickets, error } = await query.order("horas_estimadas", { ascending: false });
 
     if (error) throw error;
 

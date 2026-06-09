@@ -552,15 +552,33 @@
         <h1>📋 Análisis Cumplimiento</h1>
       </div>
 
-      <!-- Estado de conexión -->
-      <div class="filters" style="justify-content:space-between;">
-        <div style="display:flex;align-items:center;gap:12px;">
-          <span id="supaStatus" style="font-size:13px;color:#888;">Verificando conexión...</span>
+      <!-- Filtros -->
+      <div class="filters">
+        <div class="filter-group">
+          <label>Empresa</label>
+          <select id="excelEmpresa">
+            <option value="Elecmetal">Elecmetal</option>
+            <option value="Nexus">Nexus</option>
+            <option value="Toyota">Toyota</option>
+            <option value="Santander">Santander</option>
+            <option value="Neox">Neox</option>
+          </select>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;">
+        <div class="filter-group">
+          <label>Desde</label>
+          <input type="date" id="excelFechaInicio">
+        </div>
+        <div class="filter-group">
+          <label>Hasta</label>
+          <input type="date" id="excelFechaFin">
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:4px;">
           <input type="file" id="excelFileInput" accept=".xlsx" style="font-size:13px;">
           <button class="btn" onclick="uploadExcel()" id="uploadBtn" disabled>📤 Cargar a BD</button>
         </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+        <span id="supaStatus" style="font-size:13px;color:#888;">Verificando conexión...</span>
       </div>
 
       <div id="excelLoading" class="loading">
@@ -1155,6 +1173,11 @@
     // Verificar estado de Supabase
     async function checkExcelStatus() {
       const statusEl = document.getElementById('supaStatus');
+      // Set default dates
+      const now = new Date();
+      const firstOfYear = new Date(now.getFullYear(), 0, 1);
+      document.getElementById('excelFechaInicio').value = firstOfYear.toISOString().slice(0, 10);
+      document.getElementById('excelFechaFin').value = now.toISOString().slice(0, 10);
       try {
         const res = await fetch('/api/excel/status');
         const data = await res.json();
@@ -1182,8 +1205,10 @@
       const fileInput = document.getElementById('excelFileInput');
       if (!fileInput.files.length) { alert('Selecciona un archivo Excel'); return; }
 
+      const empresa = document.getElementById('excelEmpresa').value;
       const formData = new FormData();
       formData.append('file', fileInput.files[0]);
+      formData.append('empresa', empresa);
 
       const loading = document.getElementById('excelLoading');
       const msg = document.getElementById('excelLoadingMsg');
@@ -1208,7 +1233,14 @@
     // Cargar análisis
     async function cargarAnalisis() {
       try {
-        const res = await fetch('/api/excel/analisis');
+        const empresa = document.getElementById('excelEmpresa').value;
+        const inicio = document.getElementById('excelFechaInicio').value;
+        const fin = document.getElementById('excelFechaFin').value;
+        const params = new URLSearchParams({ empresa });
+        if (inicio) params.set('inicio', inicio);
+        if (fin) params.set('fin', fin);
+
+        const res = await fetch(`/api/excel/analisis?${params}`);
         const data = await res.json();
         if (data.error) return;
 
