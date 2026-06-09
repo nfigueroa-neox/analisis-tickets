@@ -696,29 +696,41 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
 
     // 2. Obtener horas reales desde MongoDB (comentarios con campo hh)
     const mongoHours = {}; // ticket_ref -> total horas
+    let mongoDebug = { total: 0, matched: 0, samples: [] };
     try {
       await getDB();
+      // Buscar tickets con hh en comentarios
+      const mongoResults = await db.collection("incidents")
+        .find({ "commentaries.hh": { $exists: true, $gt: 0 } })
+        .project({ title: 1, ticketNumber: 1, "commentaries.hh": 1 })
+        .limit(5)
+        .toArray();
+      mongoDebug.samples = mongoResults.map(r => ({
+        ticketNumber: r.ticketNumber,
+        title: (r.title || "").substring(0, 50),
+        ref: (r.title || "").match(/#\d+/)?.[0] || null,
+        hhCount: r.commentaries?.filter(c => c.hh > 0).length || 0
+      }));
+
+      // Ahora sí, hacer la agregación completa
       const mongoPipeline = [
         { $unwind: "$commentaries" },
         { $match: { "commentaries.hh": { $exists: true, $gt: 0 } } },
-        {
-          $group: {
-            _id: "$title",
-            totalHH: { $sum: { $divide: ["$commentaries.hh", 60] } }
-          }
-        }
+        { $group: { _id: "$title", totalHH: { $sum: { $divide: ["$commentaries.hh", 60] } } } }
       ];
-      const mongoResults = await db.collection("incidents").aggregate(mongoPipeline).toArray();
-      mongoResults.forEach(r => {
-        // Extraer #XYZ del título de MongoDB
+      const aggResults = await db.collection("incidents").aggregate(mongoPipeline).toArray();
+      aggResults.forEach(r => {
         const ref = (r._id || "").match(/#\d+/);
         if (ref) {
           mongoHours[ref[0]] = Math.round(r.totalHH * 100) / 100;
         }
       });
-      console.log("Horas desde MongoDB:", Object.keys(mongoHours).length, "tickets");
+      mongoDebug.total = aggResults.length;
+      mongoDebug.matched = Object.keys(mongoHours).length;
+      console.log("MongoDB: total con hh:", aggResults.length, "| matched:", Object.keys(mongoHours).length);
     } catch (e) {
-      console.log("Error leyendo MongoDB:", e.message);
+      console.log("Error MongoDB:", e.message);
+      mongoDebug.error = e.message;
     }
 
     // 3. Cruzar datos: Excel + MongoDB
@@ -783,7 +795,9 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
       nivel_alerta: t.dias >= 90 ? "critico" : t.dias >= 30 ? "alerta" : t.dias >= 7 ? "atencion" : "normal",
     }));
 
-    res.json({ comparacion, resumen, por_estado, tickets_antiguos });
+    const response = { comparacion, resumen, por_estado, tickets_antiguos };
+    if (req.query.debug) response._debug = mongoDebug;
+    res.json(response);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
