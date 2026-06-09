@@ -627,9 +627,13 @@ app.post("/api/excel/upload", requireAdmin, upload.single("file"), async (req, r
       prioridad: row[6] || null,
       tipo: row[7] || null,
       horas_estimadas: (() => {
-        const v = parseFloat(row[8]);
+        const raw = String(row[8] || '');
+        // Intentar rango "4 - 8" -> tomar el mayor
+        const rango = raw.match(/≈?\s*(\d+[\.]?\d*)\s*[-–]\s*(\d+[\.]?\d*)/);
+        if (rango) return parseFloat(rango[2]); // valor mayor
+        const v = parseFloat(raw);
         return (v && v > 0 && v < 500) ? v : null;
-      })(),  // Filtrar fechas seriales (valores > 500)
+      })(),  // Soporta rangos "4-8" (toma el mayor), filtra seriales > 500
       vb_george: row[10] || null,
       se_aplica_en: row[11] || null,
       horas_diarias: horasDiarias,
