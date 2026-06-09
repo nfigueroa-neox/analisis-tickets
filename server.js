@@ -777,7 +777,7 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
 });
 
 // ─── Setup: crear tabla si no existe ───────────────────────────────────────
-app.get("/api/setup", requireAdmin, async (req, res) => {
+app.get("/api/setup", async (req, res) => {
   try {
     const pool = getPgPool();
     if (!pool) return res.json({ ok: false, message: "SUPABASE_URL no configurada" });
