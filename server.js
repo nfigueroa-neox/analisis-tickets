@@ -739,21 +739,36 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
   }
 });
 
-// ─── Setup: crear tabla si no existe ───────────────────────────────────────
+// ─── Setup: refrescar schema cache e intentar crear tabla ───────────────────
 app.get("/api/setup", requireAdmin, async (req, res) => {
   try {
     const supabase = getSupabase();
     if (!supabase) return res.json({ ok: false, message: "Supabase no configurado" });
 
-    // Intentar leer la tabla para ver si existe
-    const { error } = await supabase.from("tickets_elecmetal").select("id", { count: "exact", head: true });
+    // Intentar varios métodos para forzar la creación/refrescación
+    const results = [];
 
-    if (error && error.code === "PGRST116") {
-      // Tabla no existe - dar instrucciones al usuario
-      return res.json({
-        ok: false,
-        message: "La tabla 'tickets_elecmetal' no existe.",
-        sql: `
+    // Método 1: Notificar a Supabase que refresque schema cache
+    try {
+      const { error: rpcError } = await supabase.rpc("refresh_schema_cache");
+      results.push({ metodo: "refresh_schema_cache", ok: !rpcError, error: rpcError?.message });
+    } catch (e) {
+      results.push({ metodo: "refresh_schema_cache", ok: false, error: e.message });
+    }
+
+    // Método 2: Verificar si la tabla existe
+    try {
+      const { error: selError } = await supabase.from("tickets_elecmetal").select("id", { count: "exact", head: true });
+      results.push({ metodo: "check_table", ok: !selError, error: selError?.message || selError?.code });
+      if (!selError) {
+        return res.json({ ok: true, message: "Tabla existe OK", results });
+      }
+    } catch (e) {
+      results.push({ metodo: "check_table", ok: false, error: e.message });
+    }
+
+    // Si la tabla no existe, devolver SQL para crear
+    const sql = `
 CREATE TABLE tickets_elecmetal (
   id SERIAL PRIMARY KEY,
   ticket_ref VARCHAR(50),
@@ -779,12 +794,15 @@ CREATE TABLE tickets_elecmetal (
 CREATE INDEX IF NOT EXISTS idx_tickets_elecmetal_estado ON tickets_elecmetal(estado);
 CREATE INDEX IF NOT EXISTS idx_tickets_elecmetal_a_cargo ON tickets_elecmetal(a_cargo_de);
 CREATE INDEX IF NOT EXISTS idx_tickets_elecmetal_ref ON tickets_elecmetal(ticket_ref);
-        `.trim(),
-        instrucciones: "Ve a Supabase > SQL Editor > New Query, pega este SQL y ejecútalo.",
-      });
-    }
+    `.trim();
 
-    res.json({ ok: true, message: "Tabla tickets_elecmetal existe" });
+    res.json({
+      ok: false,
+      message: "Debes crear la tabla manualmente",
+      results,
+      sql,
+      paso: "1. Ve a https://supabase.com/dashboard/project/imsylcojgjhuyyqzlmlb\n2. Haz clic en SQL Editor (menú izquierdo)\n3. Haz clic en 'New Query'\n4. Pega el SQL que está abajo\n5. Haz clic en 'Run' (▶️)\n6. Luego recarga esta página",
+    });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
