@@ -18,7 +18,7 @@ let excelPriorityMap = {}; // #XYZ -> prioridad
 function loadExcel() {
   try {
     const X = require("xlsx");
-    const wb = X.readFile(process.env.EXCEL_PATH || "D:/Neox/Proyectos/Monitoreo-Tickets/_Ticket_Elecmental.xlsx");
+    const wb = X.readFile(process.env.EXCEL_PATH || "./backend/_Ticket_Elecmental.xlsx");
     const sheet = wb.Sheets["NEOX Elecmetal"];
     if (!sheet) { console.log("Sheet NEOX Elecmetal no encontrada"); return; }
     const data = X.utils.sheet_to_json(sheet, { defval: "" });
