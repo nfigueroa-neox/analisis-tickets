@@ -723,7 +723,7 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
 });
 
 // ─── Setup: crear tabla si no existe ───────────────────────────────────────
-app.get("/api/setup", async (req, res) => {
+app.get("/api/setup", requireAdmin, async (req, res) => {
   try {
     const supabase = getSupabase();
     if (!supabase) return res.json({ ok: false, message: "Supabase no configurado" });
