@@ -1302,7 +1302,12 @@
           labels: comp.map(t => (t.ticket_ref || '')),
           datasets: [
             { label: 'HH Estimadas', data: comp.map(t => t.horas_estimadas), backgroundColor: '#4e79a7', borderRadius: 4 },
-            { label: 'HH Reales', data: comp.map(t => t.horas_reales), backgroundColor: '#f28e2b', borderRadius: 4 },
+            {
+              label: 'HH Reales',
+              data: comp.map(t => t.horas_reales),
+              backgroundColor: comp.map(t => t.categoria === 'en_validacion' ? '#f39c12' : '#f28e2b'),
+              borderRadius: 4,
+            },
           ]
         },
         options: {
@@ -1312,7 +1317,20 @@
               showExcelTicketDetail(comp[item[0].index]);
             }
           },
-          plugins: { legend: { position: 'top' } }
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: {
+                generateLabels: function(chart) {
+                  return [
+                    { text: 'HH Estimadas', fillStyle: '#4e79a7' },
+                    { text: 'HH Reales', fillStyle: '#f28e2b' },
+                    { text: 'HH Reales (en validación)', fillStyle: '#f39c12' },
+                  ];
+                }
+              }
+            }
+          }
         }
       });
 
