@@ -453,6 +453,7 @@
       <div class="filter-group">
         <label>Usuario</label>
         <select id="userSelect"><option value="">Cargando usuarios...</option></select>
+        <div id="userSelectDetail" style="font-size:11px;color:#888;margin-top:2px;min-height:16px;"></div>
       </div>
       <div class="filter-group">
         <label>Empresa</label>
@@ -683,8 +684,20 @@
         users.forEach(u => {
           const opt = document.createElement('option');
           opt.value = u.email;
-          opt.textContent = `${u.name} (${u.email}) — ${u.company}`;
+          opt.textContent = u.name;
+          opt.dataset.email = u.email;
+          opt.dataset.company = u.company;
           userSelect.appendChild(opt);
+        });
+        // Mostrar detalle del usuario seleccionado
+        userSelect.addEventListener('change', function() {
+          const detail = document.getElementById('userSelectDetail');
+          const selected = this.options[this.selectedIndex];
+          if (selected && selected.value) {
+            detail.textContent = `${selected.dataset.email} — ${selected.dataset.company}`;
+          } else {
+            detail.textContent = '';
+          }
         });
 
         const companySelect = document.getElementById('companySelect');
