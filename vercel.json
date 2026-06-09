@@ -1,4 +1,7 @@
 {
+  "framework": "angular",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist/frontend/browser",
   "functions": {
     "backend/api/**/*.js": {
       "memory": 256,

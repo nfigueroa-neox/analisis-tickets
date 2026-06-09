@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "npm install && npx ng build --output-path dist --output-hashing all",
+    "build": "npm install && npx ng build",
     "start": "node backend/server.js",
     "ng": "ng"
   },
