@@ -148,38 +148,34 @@ function parseUserEmail(commentaryBy) {
   return match ? match[1].toLowerCase() : commentaryBy.toLowerCase().trim();
 }
 
-// ─── Supabase (PostgreSQL) ─────────────────────────────────────────────────
-const { Pool } = require("pg");
-let pgPool = null;
+// ─── Supabase (REST API) ───────────────────────────────────────────────────
+const { createClient } = require("@supabase/supabase-js");
 
-let pgPoolPromise = null;
-async function getPgPool() {
-  if (!pgPoolPromise) {
+let supabaseClient = null;
+
+function getSupabase() {
+  if (!supabaseClient) {
     const SUPABASE_URL = process.env.SUPABASE_URL;
-    if (!SUPABASE_URL) return null;
-
-    pgPoolPromise = (async () => {
-      const dns = require("dns");
-      const url = new URL(SUPABASE_URL);
-      const hostname = url.hostname;
-      // Resolver IPv6 manualmente (Supabase solo tiene AAAA)
-      const addresses = await dns.promises.resolve6(hostname);
-      const ipv6 = addresses[0];
-      console.log("Supabase IPv6:", ipv6);
-
-      const pool = new Pool({
-        host: ipv6,
-        port: 5432,
-        database: "postgres",
-        user: "postgres",
-        password: url.password,
-        ssl: { rejectUnauthorized: false },
-        connectionTimeoutMillis: 10000,
-      });
-      return pool;
-    })();
+    const SUPABASE_KEY = process.env.SUPABASE_KEY;
+    if (SUPABASE_URL && SUPABASE_KEY) {
+      supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+      console.log("Supabase REST client listo");
+    }
   }
-  return pgPoolPromise;
+  return supabaseClient;
+}
+
+// Helper para ejecutar SQL vía REST (solo SELECT, INSERT, UPDATE, DELETE)
+async function supabaseQuery(sql) {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error("Supabase no configurado");
+  // Usamos rpc como endpoint genérico para queries
+  const { data, error } = await supabase.rpc("exec_sql", { query: sql });
+  if (error) {
+    // Si exec_sql no existe, hacemos la query directa a la tabla
+    throw error;
+  }
+  return data;
 }
 
 // ─── Multer (subida de archivos) ────────────────────────────────────────────
@@ -551,27 +547,19 @@ app.get("/api/ticket/:ticketNumber", requireAdmin, async (req, res) => {
 // 1. Estado de la conexión y datos
 app.get("/api/excel/status", requireAdmin, async (req, res) => {
   try {
-    const pool = await getPgPool();
-    if (!pool) return res.json({ connected: false, message: "SUPABASE_URL no configurada" });
+    const supabase = getSupabase();
+    if (!supabase) return res.json({ connected: false, message: "Supabase no configurado" });
 
-    const result = await pool.query("SELECT COUNT(*) as total FROM tickets_elecmetal");
-    const count = parseInt(result.rows[0].total);
+    const { data, error, count } = await supabase
+      .from("tickets_elecmetal")
+      .select("*", { count: "exact", head: true });
 
-    // Última actualización
-    const lastUpdate = await pool.query(
-      "SELECT MAX(updated_at) as ultima FROM tickets_elecmetal"
-    );
-
-    res.json({
-      connected: true,
-      total: count,
-      ultima_actualizacion: lastUpdate.rows[0].ultima,
-    });
-  } catch (err) {
-    if (err.code === "42P01") {
-      // Tabla no existe
+    if (error && error.code === "PGRST116") {
       return res.json({ connected: true, total: 0, message: "Tabla no creada aún" });
     }
+
+    res.json({ connected: true, total: count || 0 });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
@@ -579,8 +567,8 @@ app.get("/api/excel/status", requireAdmin, async (req, res) => {
 // 2. Subir Excel y sincronizar con Supabase
 app.post("/api/excel/upload", requireAdmin, upload.single("file"), async (req, res) => {
   try {
-    const pool = await getPgPool();
-    if (!pool) return res.status(400).json({ error: "Supabase no configurado" });
+    const supabase = getSupabase();
+    if (!supabase) return res.status(400).json({ error: "Supabase no configurado" });
 
     const X = require("xlsx");
     const wb = X.read(req.file.buffer, { type: "buffer" });
@@ -590,35 +578,29 @@ app.post("/api/excel/upload", requireAdmin, upload.single("file"), async (req, r
     const data = X.utils.sheet_to_json(sheet, { defval: null, header: 1 });
     if (data.length < 2) return res.status(400).json({ error: "Excel vacío" });
 
-    // Extraer encabezados de la fila 1 (fechas de seguimiento diario)
     const headers = data[0];
     const rows = data.slice(1);
-
     let insertados = 0;
     let actualizados = 0;
 
     for (const row of rows) {
       const title = (row[0] || "").toString().trim();
       if (!title) continue;
-
       const ticketRef = title.match(/#\d+/)?.[0] || null;
+      if (!ticketRef) continue;
 
-      // Construir JSON de horas diarias
       const horasDiarias = {};
       for (let i = 12; i < headers.length; i++) {
         const h = headers[i];
         if (h && !h.toString().startsWith("__EMPTY") && row[i] !== null && row[i] !== "") {
           const val = parseFloat(row[i]);
-          if (!isNaN(val) && val > 0) {
-            const fecha = h.toString().trim();
-            horasDiarias[fecha] = val;
-          }
+          if (!isNaN(val) && val > 0) horasDiarias[h.toString().trim()] = val;
         }
       }
 
-      const fields = {
+      const record = {
         ticket_ref: ticketRef,
-        title: title,
+        title,
         estado: row[4] || null,
         a_cargo_de: row[5] || null,
         prioridad: row[6] || null,
@@ -632,59 +614,27 @@ app.post("/api/excel/upload", requireAdmin, upload.single("file"), async (req, r
         responsable_validacion: row[row.length - 2] || null,
         avance_semana_anterior: parseFloat(row[row.length - 1]) || null,
       };
+      if (row[1]) try { record.fecha_creacion = new Date(row[1]).toISOString(); } catch (e) {}
+      if (row[2]) try { record.cambio_estado = new Date(row[2]).toISOString(); } catch (e) {}
+      if (row[3] !== null && row[3] !== "") record.dias = parseInt(row[3]) || null;
 
-      // Fecha de creación (columna B / índice 1)
-      if (row[1]) {
-        try { fields.fecha_creacion = new Date(row[1]); } catch (e) {}
-      }
-      // Cambio de estado (columna C / índice 2)
-      if (row[2]) {
-        try { fields.cambio_estado = new Date(row[2]); } catch (e) {}
-      }
-      // Días (columna D / índice 3)
-      if (row[3] !== null && row[3] !== "") {
-        fields.dias = parseInt(row[3]) || null;
-      }
+      // Upsert via REST
+      const { data: existing } = await supabase
+        .from("tickets_elecmetal")
+        .select("id")
+        .eq("ticket_ref", ticketRef)
+        .maybeSingle();
 
-      // UPSERT: si existe el mismo ticket_ref, actualizar; si no, insertar
-      if (ticketRef) {
-        const existing = await pool.query(
-          "SELECT id FROM tickets_elecmetal WHERE ticket_ref = $1",
-          [ticketRef]
-        );
-
-        if (existing.rows.length > 0) {
-          const sets = Object.entries(fields)
-            .filter(([k]) => k !== "ticket_ref")
-            .map(([k, v], i) => `${k} = $${i + 2}`)
-            .join(", ");
-          const vals = Object.entries(fields)
-            .filter(([k]) => k !== "ticket_ref")
-            .map(([, v]) => v);
-          await pool.query(
-            `UPDATE tickets_elecmetal SET ${sets} WHERE ticket_ref = $1`,
-            [ticketRef, ...vals]
-          );
-          actualizados++;
-        } else {
-          const cols = Object.keys(fields).join(", ");
-          const params = Object.keys(fields).map((_, i) => `$${i + 1}`).join(", ");
-          const vals = Object.values(fields);
-          await pool.query(
-            `INSERT INTO tickets_elecmetal (${cols}) VALUES (${params})`,
-            vals
-          );
-          insertados++;
-        }
+      if (existing) {
+        await supabase.from("tickets_elecmetal").update(record).eq("ticket_ref", ticketRef);
+        actualizados++;
+      } else {
+        await supabase.from("tickets_elecmetal").insert(record);
+        insertados++;
       }
     }
 
-    res.json({
-      ok: true,
-      insertados,
-      actualizados,
-      total_filas: rows.filter(r => (r[0] || "").toString().trim()).length,
-    });
+    res.json({ ok: true, insertados, actualizados, total_filas: rows.filter(r => (r[0] || "").toString().trim()).length });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -694,160 +644,130 @@ app.post("/api/excel/upload", requireAdmin, upload.single("file"), async (req, r
 // 3. Análisis: comparación estimación vs real
 app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
   try {
-    const pool = await getPgPool();
-    if (!pool) return res.json({ error: "Supabase no configurado" });
+    const supabase = getSupabase();
+    if (!supabase) return res.json({ error: "Supabase no configurado" });
 
-    // Tickets con horas estimadas y reales
-    const comparacion = await pool.query(`
-      SELECT
-        ticket_ref,
-        title,
-        a_cargo_de,
-        estado,
-        prioridad,
-        horas_estimadas,
-        horas_reales,
-        CASE
-          WHEN horas_estimadas > 0 AND horas_reales IS NOT NULL
-            THEN ROUND(((horas_estimadas - horas_reales) / horas_estimadas * 100)::numeric, 1)
-          ELSE NULL
-        END as desviacion_pct,
-        CASE
-          WHEN horas_estimadas > 0 AND horas_reales IS NOT NULL AND horas_reales <= horas_estimadas THEN 'dentro'
-          WHEN horas_estimadas > 0 AND horas_reales IS NOT NULL AND horas_reales > horas_estimadas THEN 'excedido'
-          ELSE 'sin_datos'
-        END as categoria
-      FROM tickets_elecmetal
-      WHERE horas_estimadas IS NOT NULL AND horas_estimadas > 0
-      ORDER BY horas_estimadas DESC
-    `);
+    // Obtener todos los tickets con estimación
+    const { data: tickets, error } = await supabase
+      .from("tickets_elecmetal")
+      .select("*")
+      .not("horas_estimadas", "is", null)
+      .gt("horas_estimadas", 0)
+      .order("horas_estimadas", { ascending: false });
 
-    // Resumen de cumplimiento
-    const resumen = await pool.query(`
-      SELECT
-        COUNT(*) as total_con_estimacion,
-        SUM(CASE WHEN horas_reales IS NOT NULL THEN 1 ELSE 0 END) as total_con_reales,
-        SUM(CASE WHEN horas_reales IS NOT NULL AND horas_reales <= horas_estimadas THEN 1 ELSE 0 END) as dentro_estimacion,
-        SUM(CASE WHEN horas_reales IS NOT NULL AND horas_reales > horas_estimadas THEN 1 ELSE 0 END) as excedido,
-        ROUND(AVG(CASE WHEN horas_reales IS NOT NULL THEN horas_reales ELSE NULL END)::numeric, 1) as promedio_horas_reales,
-        ROUND(AVG(horas_estimadas)::numeric, 1) as promedio_horas_estimadas
-      FROM tickets_elecmetal
-      WHERE horas_estimadas IS NOT NULL AND horas_estimadas > 0
-    `);
+    if (error) throw error;
 
-    // Análisis por estado y tiempo
-    const por_estado = await pool.query(`
-      SELECT
-        estado,
-        COUNT(*) as cantidad,
-        ROUND(AVG(
-          CASE WHEN horas_reales IS NOT NULL THEN horas_reales ELSE NULL END
-        )::numeric, 1) as promedio_horas
-      FROM tickets_elecmetal
-      GROUP BY estado
-      ORDER BY cantidad DESC
-    `);
+    // Procesar en JS (en vez de SQL aggregates, por REST)
+    const comparacion = tickets.map(t => ({
+      ticket_ref: t.ticket_ref,
+      title: t.title,
+      a_cargo_de: t.a_cargo_de,
+      estado: t.estado,
+      prioridad: t.prioridad,
+      horas_estimadas: t.horas_estimadas,
+      horas_reales: t.horas_reales,
+      desviacion_pct: t.horas_estimadas > 0 && t.horas_reales !== null
+        ? Math.round(((t.horas_estimadas - t.horas_reales) / t.horas_estimadas) * 100 * 10) / 10
+        : null,
+      categoria: t.horas_estimadas > 0 && t.horas_reales !== null
+        ? (t.horas_reales <= t.horas_estimadas ? "dentro" : "excedido")
+        : "sin_datos",
+    }));
+
+    const totalConEst = tickets.length;
+    const conReales = tickets.filter(t => t.horas_reales !== null);
+    const dentro = conReales.filter(t => t.horas_reales <= t.horas_estimadas);
+    const excedido = conReales.filter(t => t.horas_reales > t.horas_estimadas);
+
+    const resumen = {
+      total_con_estimacion: totalConEst,
+      total_con_reales: conReales.length,
+      dentro_estimacion: dentro.length,
+      excedido: excedido.length,
+      promedio_horas_reales: conReales.length ? Math.round(conReales.reduce((s, t) => s + t.horas_reales, 0) / conReales.length * 10) / 10 : 0,
+      promedio_horas_estimadas: Math.round(tickets.reduce((s, t) => s + t.horas_estimadas, 0) / tickets.length * 10) / 10,
+    };
+
+    // Por estado
+    const estadoMap = {};
+    tickets.forEach(t => {
+      const e = t.estado || "Sin estado";
+      if (!estadoMap[e]) estadoMap[e] = { count: 0, totalHH: 0 };
+      estadoMap[e].count++;
+      if (t.horas_reales !== null) estadoMap[e].totalHH += t.horas_reales;
+    });
+    const por_estado = Object.entries(estadoMap).map(([estado, v]) => ({
+      estado,
+      cantidad: v.count,
+      promedio_horas: v.count > 0 ? Math.round(v.totalHH / v.count * 10) / 10 : 0,
+    })).sort((a, b) => b.cantidad - a.cantidad);
 
     // Tickets con cambio de estado más antiguo
-    const tickets_antiguos = await pool.query(`
-      SELECT
-        ticket_ref,
-        title,
-        estado,
-        a_cargo_de,
-        cambio_estado,
-        dias,
-        CASE
-          WHEN dias >= 90 THEN 'critico'
-          WHEN dias >= 30 THEN 'alerta'
-          WHEN dias >= 7 THEN 'atencion'
-          ELSE 'normal'
-        END as nivel_alerta
-      FROM tickets_elecmetal
-      WHERE cambio_estado IS NOT NULL
-      ORDER BY cambio_estado ASC
-      LIMIT 50
-    `);
+    const { data: antiguos } = await supabase
+      .from("tickets_elecmetal")
+      .select("ticket_ref, title, estado, a_cargo_de, cambio_estado, dias")
+      .not("cambio_estado", "is", null)
+      .order("cambio_estado", { ascending: true })
+      .limit(50);
 
-    // Métricas generales
-    const metricas = await pool.query(`
-      SELECT
-        ROUND(AVG(CASE WHEN horas_reales IS NOT NULL THEN horas_reales ELSE NULL END)::numeric, 1) as avg_horas_reales,
-        ROUND(AVG(horas_estimadas)::numeric, 1) as avg_horas_estimadas,
-        COUNT(*) as total_tickets,
-        SUM(CASE WHEN estado ILIKE '%validaci%cliente%' OR estado ILIKE '%pendiente%cliente%' THEN 1 ELSE 0 END) as pendientes_cliente
-      FROM tickets_elecmetal
-    `);
+    const tickets_antiguos = (antiguos || []).map(t => ({
+      ...t,
+      nivel_alerta: t.dias >= 90 ? "critico" : t.dias >= 30 ? "alerta" : t.dias >= 7 ? "atencion" : "normal",
+    }));
 
-    res.json({
-      comparacion: comparacion.rows,
-      resumen: resumen.rows[0],
-      por_estado: por_estado.rows,
-      tickets_antiguos: tickets_antiguos.rows,
-      metricas: metricas.rows[0],
-    });
+    res.json({ comparacion, resumen, por_estado, tickets_antiguos });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ─── Diagnóstico de conexión ──────────────────────────────────────────────
-app.get("/api/db-check", async (req, res) => {
-  const dns = require("dns");
-  const host = "db.imsylcojgjhuyyqzlmlb.supabase.co";
-  try {
-    const addresses = await new Promise((resolve, reject) => {
-      dns.resolve4(host, (err, a) => { if (err) reject(err); else resolve(a); });
-    });
-    res.json({ host, ipv4: addresses, message: "DNS resuelve OK" });
-  } catch (e4) {
-    try {
-      const addresses = await new Promise((resolve, reject) => {
-        dns.resolve6(host, (err, a) => { if (err) reject(err); else resolve(a); });
-      });
-      res.json({ host, ipv4: null, ipv6: addresses, message: "Solo IPv6" });
-    } catch (e6) {
-      res.json({ host, error: { v4: e4.message, v6: e6.message }, message: "No resuelve" });
-    }
-  }
-});
-
 // ─── Setup: crear tabla si no existe ───────────────────────────────────────
 app.get("/api/setup", async (req, res) => {
   try {
-    const pool = await getPgPool();
-    if (!pool) return res.json({ ok: false, message: "SUPABASE_URL no configurada" });
+    const supabase = getSupabase();
+    if (!supabase) return res.json({ ok: false, message: "Supabase no configurado" });
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS tickets_elecmetal (
-        id SERIAL PRIMARY KEY,
-        ticket_ref VARCHAR(50),
-        title TEXT,
-        estado VARCHAR(100),
-        fecha_creacion DATE,
-        cambio_estado TIMESTAMP,
-        dias INTEGER,
-        a_cargo_de VARCHAR(200),
-        prioridad VARCHAR(50),
-        tipo VARCHAR(100),
-        horas_estimadas NUMERIC(10,2),
-        horas_reales NUMERIC(10,2),
-        vb_george VARCHAR(200),
-        se_aplica_en VARCHAR(200),
-        avance NUMERIC(5,2),
-        responsable_validacion VARCHAR(200),
-        avance_semana_anterior NUMERIC(5,2),
-        horas_diarias JSONB DEFAULT '{}',
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS idx_tickets_elecmetal_estado ON tickets_elecmetal(estado);
-      CREATE INDEX IF NOT EXISTS idx_tickets_elecmetal_a_cargo ON tickets_elecmetal(a_cargo_de);
-      CREATE INDEX IF NOT EXISTS idx_tickets_elecmetal_ref ON tickets_elecmetal(ticket_ref);
-    `);
+    // Intentar leer la tabla para ver si existe
+    const { error } = await supabase.from("tickets_elecmetal").select("id", { count: "exact", head: true });
 
-    res.json({ ok: true, message: "Tabla tickets_elecmetal creada/verificada" });
+    if (error && error.code === "PGRST116") {
+      // Tabla no existe - dar instrucciones al usuario
+      return res.json({
+        ok: false,
+        message: "La tabla 'tickets_elecmetal' no existe.",
+        sql: `
+CREATE TABLE tickets_elecmetal (
+  id SERIAL PRIMARY KEY,
+  ticket_ref VARCHAR(50),
+  title TEXT,
+  estado VARCHAR(100),
+  fecha_creacion DATE,
+  cambio_estado TIMESTAMP,
+  dias INTEGER,
+  a_cargo_de VARCHAR(200),
+  prioridad VARCHAR(50),
+  tipo VARCHAR(100),
+  horas_estimadas NUMERIC(10,2),
+  horas_reales NUMERIC(10,2),
+  vb_george VARCHAR(200),
+  se_aplica_en VARCHAR(200),
+  avance NUMERIC(5,2),
+  responsable_validacion VARCHAR(200),
+  avance_semana_anterior NUMERIC(5,2),
+  horas_diarias JSONB DEFAULT '{}',
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_tickets_elecmetal_estado ON tickets_elecmetal(estado);
+CREATE INDEX IF NOT EXISTS idx_tickets_elecmetal_a_cargo ON tickets_elecmetal(a_cargo_de);
+CREATE INDEX IF NOT EXISTS idx_tickets_elecmetal_ref ON tickets_elecmetal(ticket_ref);
+        `.trim(),
+        instrucciones: "Ve a Supabase > SQL Editor > New Query, pega este SQL y ejecútalo.",
+      });
+    }
+
+    res.json({ ok: true, message: "Tabla tickets_elecmetal existe" });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
