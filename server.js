@@ -1,7 +1,7 @@
 const express = require("express");
 const { MongoClient } = require("mongodb");
 const bcrypt = require("bcryptjs");
-const session = require("express-session");
+const cookieSession = require("cookie-session");
 
 const app = express();
 const PORT = process.env.PORT || 3456;
@@ -13,18 +13,32 @@ const SESSION_SECRET = process.env.SESSION_SECRET || "nxsupport-horas-secret-key
 
 let db;
 
-// ─── Session config ─────────────────────────────────────────────────────────
-app.use(session({
+// ─── Session config (cookie-based, sin estado - ideal para Vercel) ──────────
+app.use(cookieSession({
+  name: "session",
   secret: SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    maxAge: 8 * 60 * 60 * 1000, // 8 horas
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-  }
+  maxAge: 8 * 60 * 60 * 1000, // 8 horas
+  httpOnly: true,
+  sameSite: "lax",
+  secure: process.env.VERCEL === "1", // HTTPS en Vercel
 }));
+
+// Vercel requiere mantener la conexión MongoDB viva entre requests
+let dbPromise = null;
+function getDB() {
+  if (!dbPromise) {
+    dbPromise = (async () => {
+      const client = new MongoClient(MONGO_URI, {
+        readPreference: "secondaryPreferred",
+      });
+      await client.connect();
+      db = client.db(DB_NAME);
+      console.log("Conectado a MongoDB (solo lectura)");
+      return db;
+    })();
+  }
+  return dbPromise;
+}
 
 // ─── Regex para extraer horas de texto ──────────────────────────────────────
 // Orden de patrones: de más específico a más genérico
@@ -93,17 +107,6 @@ function parseUserEmail(commentaryBy) {
 app.use(express.json());
 app.use(express.static("public"));
 
-// ─── Conexión MongoDB ──────────────────────────────────────────────────────
-async function connectDB() {
-  const client = new MongoClient(MONGO_URI, {
-    readPreference: "secondaryPreferred",
-    directConnection: false,
-  });
-  await client.connect();
-  db = client.db(DB_NAME);
-  console.log("Conectado a MongoDB (solo lectura)");
-}
-
 // ─── Auth middleware ────────────────────────────────────────────────────────
 function requireAdmin(req, res, next) {
   if (req.session && req.session.user && req.session.user.roles && req.session.user.roles.includes("ADMIN")) {
@@ -122,7 +125,7 @@ app.post("/api/login", async (req, res) => {
       return res.status(400).json({ error: "Email y contraseña requeridos" });
     }
 
-    const user = await db.collection("users").findOne({ email: email.toLowerCase() });
+    const user = await (await getDB()).collection("users").findOne({ email: email.toLowerCase() });
     if (!user) {
       return res.status(401).json({ error: "Credenciales inválidas" });
     }
@@ -175,7 +178,7 @@ app.get("/api/session", (req, res) => {
 // 1. Lista de usuarios (con nombre y email)
 app.get("/api/users", requireAdmin, async (req, res) => {
   try {
-    const users = await db
+    const users = await (await getDB())
       .collection("users")
       .find(
         {},
@@ -201,14 +204,14 @@ app.get("/api/users", requireAdmin, async (req, res) => {
 // 2. Lista de empresas
 app.get("/api/companies", requireAdmin, async (req, res) => {
   try {
-    const companiesFromCol = await db
+    const companiesFromCol = await (await getDB())
       .collection("companies")
       .find({}, { projection: { name: 1, _id: 0 } })
       .toArray();
     let companies = companiesFromCol.map((c) => c.name);
 
     // También agregamos empresas reales desde incidents (filtro estricto)
-    const incidentCompanies = await db
+    const incidentCompanies = await (await getDB())
       .collection("incidents")
       .distinct("company");
     const realCompanies = incidentCompanies.filter(
@@ -276,7 +279,7 @@ app.get("/api/hours", requireAdmin, async (req, res) => {
       { $sort: { commentDate: 1 } },
     ];
 
-    const comments = await db
+    const comments = await (await getDB())
       .collection("incidents")
       .aggregate(pipeline)
       .toArray();
@@ -380,7 +383,7 @@ app.get("/api/hours", requireAdmin, async (req, res) => {
 // 4. Detalle de horas de un ticket específico
 app.get("/api/ticket/:ticketNumber", requireAdmin, async (req, res) => {
   try {
-    const ticket = await db
+    const ticket = await (await getDB())
       .collection("incidents")
       .findOne({ ticketNumber: req.params.ticketNumber });
 
@@ -431,15 +434,20 @@ app.get("/api/ticket/:ticketNumber", requireAdmin, async (req, res) => {
   }
 });
 
-// ─── Inicio ─────────────────────────────────────────────────────────────────
-async function main() {
-  await connectDB();
-  app.listen(PORT, () => {
-    console.log(`Servidor corriendo en http://localhost:${PORT}`);
-  });
+// ─── Inicio local ──────────────────────────────────────────────────────────
+if (process.env.VERCEL !== "1") {
+  (async () => {
+    try {
+      await getDB();
+      app.listen(PORT, () => {
+        console.log(`Servidor corriendo en http://localhost:${PORT}`);
+      });
+    } catch (err) {
+      console.error("Error al iniciar:", err);
+      process.exit(1);
+    }
+  })();
 }
 
-main().catch((err) => {
-  console.error("Error al iniciar:", err);
-  process.exit(1);
-});
+// Export para Vercel serverless
+module.exports = app;
