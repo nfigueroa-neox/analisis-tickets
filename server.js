@@ -549,7 +549,7 @@ app.get("/api/ticket/:ticketNumber", requireAdmin, async (req, res) => {
 // 1. Estado de la conexión y datos
 app.get("/api/excel/status", requireAdmin, async (req, res) => {
   try {
-    const pool = getPgPool();
+    const pool = await getPgPool();
     if (!pool) return res.json({ connected: false, message: "SUPABASE_URL no configurada" });
 
     const result = await pool.query("SELECT COUNT(*) as total FROM tickets_elecmetal");
@@ -577,7 +577,7 @@ app.get("/api/excel/status", requireAdmin, async (req, res) => {
 // 2. Subir Excel y sincronizar con Supabase
 app.post("/api/excel/upload", requireAdmin, upload.single("file"), async (req, res) => {
   try {
-    const pool = getPgPool();
+    const pool = await getPgPool();
     if (!pool) return res.status(400).json({ error: "Supabase no configurado" });
 
     const X = require("xlsx");
@@ -692,7 +692,7 @@ app.post("/api/excel/upload", requireAdmin, upload.single("file"), async (req, r
 // 3. Análisis: comparación estimación vs real
 app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
   try {
-    const pool = getPgPool();
+    const pool = await getPgPool();
     if (!pool) return res.json({ error: "Supabase no configurado" });
 
     // Tickets con horas estimadas y reales
@@ -814,7 +814,7 @@ app.get("/api/db-check", async (req, res) => {
 // ─── Setup: crear tabla si no existe ───────────────────────────────────────
 app.get("/api/setup", async (req, res) => {
   try {
-    const pool = getPgPool();
+    const pool = await getPgPool();
     if (!pool) return res.json({ ok: false, message: "SUPABASE_URL no configurada" });
 
     await pool.query(`
