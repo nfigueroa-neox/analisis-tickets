@@ -564,7 +564,7 @@ app.get("/api/excel/status", requireAdmin, async (req, res) => {
   }
 });
 
-// 2. Subir Excel y sincronizar con Supabase
+// 2. Subir Excel y sincronizar con Supabase (batch optimizado)
 app.post("/api/excel/upload", requireAdmin, upload.single("file"), async (req, res) => {
   try {
     const supabase = getSupabase();
@@ -580,7 +580,14 @@ app.post("/api/excel/upload", requireAdmin, upload.single("file"), async (req, r
 
     const headers = data[0];
     const rows = data.slice(1);
-    let insertados = 0;
+
+    // 1. Obtener todos los ticket_ref existentes de una sola vez
+    const { data: existentes } = await supabase
+      .from("tickets_elecmetal")
+      .select("ticket_ref");
+    const refsExistentes = new Set((existentes || []).map(r => r.ticket_ref));
+
+    const nuevos = [];
     let actualizados = 0;
 
     for (const row of rows) {
@@ -618,23 +625,33 @@ app.post("/api/excel/upload", requireAdmin, upload.single("file"), async (req, r
       if (row[2]) try { record.cambio_estado = new Date(row[2]).toISOString(); } catch (e) {}
       if (row[3] !== null && row[3] !== "") record.dias = parseInt(row[3]) || null;
 
-      // Upsert via REST
-      const { data: existing } = await supabase
-        .from("tickets_elecmetal")
-        .select("id")
-        .eq("ticket_ref", ticketRef)
-        .maybeSingle();
-
-      if (existing) {
+      if (refsExistentes.has(ticketRef)) {
+        // Ya existe: actualizar uno por uno pero con timeout reducido
         await supabase.from("tickets_elecmetal").update(record).eq("ticket_ref", ticketRef);
         actualizados++;
       } else {
-        await supabase.from("tickets_elecmetal").insert(record);
-        insertados++;
+        nuevos.push(record);
       }
     }
 
-    res.json({ ok: true, insertados, actualizados, total_filas: rows.filter(r => (r[0] || "").toString().trim()).length });
+    // 2. Insertar todos los nuevos en un solo batch
+    let insertados = 0;
+    if (nuevos.length > 0) {
+      // Insertar en lotes de 50 para no exceder límites
+      for (let i = 0; i < nuevos.length; i += 50) {
+        const lote = nuevos.slice(i, i + 50);
+        const { error } = await supabase.from("tickets_elecmetal").insert(lote);
+        if (error) throw error;
+        insertados += lote.length;
+      }
+    }
+
+    res.json({
+      ok: true,
+      insertados,
+      actualizados,
+      total_filas: rows.filter(r => (r[0] || "").toString().trim()).length,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
