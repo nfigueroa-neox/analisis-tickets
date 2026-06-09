@@ -166,11 +166,13 @@ async function getPgPool() {
       const addresses = await dns.promises.resolve6(hostname);
       const ipv6 = addresses[0];
       console.log("Supabase IPv6:", ipv6);
-      // Reemplazar hostname por IP literal
-      const connStr = SUPABASE_URL.replace(hostname, `[${ipv6}]`);
 
       const pool = new Pool({
-        connectionString: connStr,
+        host: ipv6,
+        port: 5432,
+        database: "postgres",
+        user: "postgres",
+        password: url.password,
         ssl: { rejectUnauthorized: false },
         connectionTimeoutMillis: 10000,
       });
