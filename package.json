@@ -4,7 +4,8 @@
   "description": "Visor de horas trabajadas - NXSupport",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "cd frontend && npm install && npm run build"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
