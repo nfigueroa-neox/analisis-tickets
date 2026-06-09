@@ -3,7 +3,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist/frontend/browser",
   "functions": {
-    "backend/api/**/*.js": {
+    "backend/api/index.js": {
       "memory": 256,
       "includeFiles": "backend/**"
     }
