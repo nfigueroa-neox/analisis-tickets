@@ -581,6 +581,17 @@ app.post("/api/excel/upload", requireAdmin, upload.single("file"), async (req, r
     const headers = data[0];
     const rows = data.slice(1);
 
+    // Convertir fecha Excel (número serial) a ISO string
+    function parseExcelDate(val) {
+      if (!val) return null;
+      if (typeof val === "number") {
+        const d = new Date((val - 2) * 86400000 + Date.UTC(1900, 0, 1));
+        return d.toISOString().slice(0, 10);
+      }
+      if (typeof val === "string" && val.match(/^\d{4}/)) return val.slice(0, 10);
+      try { return new Date(val).toISOString().slice(0, 10); } catch (e) { return null; }
+    }
+
     const empresa = req.body.empresa || "Elecmetal";
 
     // 1. Obtener todos los ticket_ref existentes de una sola vez
@@ -624,20 +635,21 @@ app.post("/api/excel/upload", requireAdmin, upload.single("file"), async (req, r
       responsable_validacion: row[row.length - 2] || null,
       avance_semana_anterior: parseFloat(row[row.length - 1]) || null,
     };
-    if (row[1]) try { record.fecha_creacion = new Date(row[1]).toISOString(); } catch (e) {}
-    if (row[2]) try { record.cambio_estado = new Date(row[2]).toISOString(); } catch (e) {}
+    const fc = row[1] ? parseExcelDate(row[1]) : null;
+    if (fc) record.fecha_creacion = fc;
+    const ce = row[2] ? parseExcelDate(row[2]) : null;
+    if (ce) record.cambio_estado = ce;
     if (row[3] !== null && row[3] !== "") record.dias = parseInt(row[3]) || null;
 
-      if (refsExistentes.has(ticketRef)) {
-        // Ya existe: actualizar uno por uno pero con timeout reducido
-        await supabase.from("tickets_elecmetal").update(record).eq("ticket_ref", ticketRef);
-        actualizados++;
-      } else {
-        nuevos.push(record);
-      }
+    if (refsExistentes.has(ticketRef)) {
+      await supabase.from("tickets_elecmetal").update(record).eq("ticket_ref", ticketRef);
+      actualizados++;
+    } else {
+      nuevos.push(record);
     }
+  }
 
-    // 2. Insertar todos los nuevos en un solo batch
+  // 2. Insertar todos los nuevos en un solo batch
     let insertados = 0;
     if (nuevos.length > 0) {
       // Insertar en lotes de 50 para no exceder límites
