@@ -317,6 +317,28 @@ app.get("/api/hours", requireAdmin, async (req, res) => {
     const startDate = start ? new Date(start) : new Date("2020-01-01");
     const endDate = end ? new Date(end) : new Date();
 
+    // Cargar SLA de MongoDB (prioridad real)
+    const slaMap = {}; // ticketNumber -> tipo (mayor/media/menor)
+    try {
+      await getDB();
+      const slas = await db.collection("slas").find({}).toArray();
+      const slaById = {};
+      slas.forEach(s => { slaById[s._id.toString()] = s.type; });
+      const ticketsConSla = await db.collection("incidents")
+        .find({ sla: { $exists: true } })
+        .project({ ticketNumber: 1, sla: 1 })
+        .toArray();
+      ticketsConSla.forEach(t => {
+        if (t.sla) {
+          const type = slaById[t.sla.toString()];
+          if (type) slaMap[t.ticketNumber] = type;
+        }
+      });
+      console.log("SLAs cargados:", Object.keys(slaMap).length, "tickets");
+    } catch (e) {
+      console.log("Error cargando SLAs:", e.message);
+    }
+
     // Filtro base: comentarios del usuario en el rango de fechas
     const matchFilter = {
       "commentaries.createdBy": {
@@ -398,8 +420,11 @@ app.get("/api/hours", requireAdmin, async (req, res) => {
         // Por ticket
         const ticketKey = c.ticketNumber;
         if (!hoursByTicket[ticketKey]) {
-          const prio = getPriorityFromTicket(c.title);
-          const prioInfo = PRIO_MAP[prio] || { color: "#95a5a6", level: "sin prioridad", order: 3 };
+          const slaType = slaMap[c.ticketNumber] || null;
+          const prio = slaType || getPriorityFromTicket(c.title);
+          // Normalizar: primera letra mayúscula ("mayor" -> "Mayor")
+          const prioKey = prio ? prio.charAt(0).toUpperCase() + prio.slice(1).toLowerCase() : null;
+          const prioInfo = PRIO_MAP[prioKey] || { color: "#95a5a6", level: "sin prioridad", order: 3 };
           hoursByTicket[ticketKey] = {
             ticketNumber: c.ticketNumber,
             title: c.title,
