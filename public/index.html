@@ -485,22 +485,31 @@
 
       <div class="charts-row">
         <div class="chart-box">
-          <h3>📊 Horas por Empresa</h3>
+          <h3 style="display:flex;justify-content:space-between;align-items:center;">
+            📊 Horas por Empresa
+            <span onclick="downloadChart('chartCompany','horas_por_empresa')" style="cursor:pointer;font-size:16px;" title="Descargar PNG">📥</span>
+          </h3>
           <canvas id="chartCompany"></canvas>
         </div>
         <div class="chart-box">
           <h3 style="display:flex;justify-content:space-between;align-items:center;">
             📈 Horas por Período
-            <select id="periodType" style="font-size:12px;padding:4px 8px;border:1px solid #d0d5dd;border-radius:6px;background:white;font-weight:400;" onchange="redrawPeriodChart()">
+            <span style="display:flex;gap:8px;align-items:center;">
+              <span onclick="downloadChart('chartPeriod','horas_por_periodo')" style="cursor:pointer;font-size:16px;" title="Descargar PNG">📥</span>
+              <select id="periodType" style="font-size:12px;padding:4px 8px;border:1px solid #d0d5dd;border-radius:6px;background:white;font-weight:400;" onchange="redrawPeriodChart()">
               <option value="day">Días</option>
               <option value="week">Semanas</option>
               <option value="month">Meses</option>
             </select>
+            </span>
           </h3>
           <canvas id="chartPeriod"></canvas>
         </div>
         <div class="chart-box">
-          <h3>🔴 Horas por Prioridad</h3>
+          <h3 style="display:flex;justify-content:space-between;align-items:center;">
+            🔴 Horas por Prioridad
+            <span onclick="downloadChart('chartPriority','horas_por_prioridad')" style="cursor:pointer;font-size:16px;" title="Descargar PNG">📥</span>
+          </h3>
           <canvas id="chartPriority"></canvas>
         </div>
       </div>
@@ -987,7 +996,11 @@
             legend: { position: 'right', labels: { font: { size: 12 } } },
             tooltip: {
               callbacks: {
-                label: ctx => `${ctx.label}: ${ctx.raw} HH`,
+                label: ctx => {
+                  const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+                  const pct = total > 0 ? Math.round(ctx.raw / total * 100) : 0;
+                  return `${ctx.label}: ${ctx.raw} HH (${pct}%)`;
+                }
               }
             }
           }
@@ -997,12 +1010,15 @@
           beforeDraw(chart) {
             const {width, height, ctx} = chart;
             ctx.save();
-            const text = selectedCompany || 'Todas';
-            ctx.font = 'bold 13px sans-serif';
-            ctx.fillStyle = selectedCompany ? '#1a1a2e' : '#888';
+            const total = chart.data.datasets[0].data.reduce((a,b)=>a+b,0);
+            ctx.font = 'bold 14px sans-serif';
+            ctx.fillStyle = '#1a1a2e';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(text, width / 2, height / 2);
+            ctx.fillText(Math.round(total) + ' HH', width / 2, height / 2 - 6);
+            ctx.font = '10px sans-serif';
+            ctx.fillStyle = '#888';
+            ctx.fillText(selectedCompany || 'Total', width / 2, height / 2 + 12);
             ctx.restore();
           }
         }]
@@ -1147,7 +1163,11 @@
             legend: { position: 'right', labels: { font: { size: 12 } } },
             tooltip: {
               callbacks: {
-                label: ctx => `${ctx.label}: ${ctx.raw} HH`,
+                label: ctx => {
+                  const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+                  const pct = total > 0 ? Math.round(ctx.raw / total * 100) : 0;
+                  return `${ctx.label}: ${ctx.raw} HH (${pct}%)`;
+                }
               }
             }
           }
@@ -1536,6 +1556,16 @@
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
+    }
+
+    // ─── Descargar chart como PNG ──────────────────────────────────────
+    function downloadChart(canvasId, filename) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const link = document.createElement('a');
+      link.download = filename + '.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
     }
 
     // ─── Init ────────────────────────────────────────────────────────────
