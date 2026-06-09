@@ -13,6 +13,9 @@ const SESSION_SECRET = process.env.SESSION_SECRET || "nxsupport-horas-secret-key
 
 let db;
 
+// Trust proxy (Vercel termina HTTPS en edge, reenvía HTTP internamente)
+app.set("trust proxy", 1);
+
 // ─── Session config (cookie-based, sin estado - ideal para Vercel) ──────────
 app.use(cookieSession({
   name: "session",
@@ -20,7 +23,7 @@ app.use(cookieSession({
   maxAge: 8 * 60 * 60 * 1000, // 8 horas
   httpOnly: true,
   sameSite: "lax",
-  secure: process.env.VERCEL === "1", // HTTPS en Vercel
+  secure: false, // Vercel maneja HTTPS externamente
 }));
 
 // Vercel requiere mantener la conexión MongoDB viva entre requests
