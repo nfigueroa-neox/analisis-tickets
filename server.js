@@ -673,7 +673,7 @@ app.post("/api/excel/upload", requireAdmin, upload.single("file"), async (req, r
   }
 });
 
-// 3. Análisis: comparación estimación vs real
+// 3. Análisis: comparación estimación vs real (cruzando con MongoDB)
 app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
   try {
     const supabase = getSupabase();
@@ -683,7 +683,7 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
     const inicio = req.query.inicio || "2000-01-01";
     const fin = req.query.fin || "2099-12-31";
 
-    // Obtener todos los tickets con estimación, filtrados por empresa y fecha
+    // 1. Obtener tickets del Excel con estimación
     let query = supabase
       .from("tickets_elecmetal")
       .select("*")
@@ -691,59 +691,86 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
       .not("horas_estimadas", "is", null)
       .gt("horas_estimadas", 0);
 
-    // Filtrar por fecha de creación si el campo existe
     query = query.gte("fecha_creacion", inicio).lte("fecha_creacion", fin);
-
     const { data: tickets, error } = await query.order("horas_estimadas", { ascending: false });
-
     if (error) throw error;
 
-    // Procesar en JS (en vez de SQL aggregates, por REST)
-    const comparacion = tickets.map(t => ({
-      ticket_ref: t.ticket_ref,
-      title: t.title,
-      a_cargo_de: t.a_cargo_de,
-      estado: t.estado,
-      prioridad: t.prioridad,
-      horas_estimadas: t.horas_estimadas,
-      horas_reales: t.horas_reales,
-      desviacion_pct: t.horas_estimadas > 0 && t.horas_reales !== null
-        ? Math.round(((t.horas_estimadas - t.horas_reales) / t.horas_estimadas) * 100 * 10) / 10
-        : null,
-      categoria: t.horas_estimadas > 0 && t.horas_reales !== null
-        ? (t.horas_reales <= t.horas_estimadas ? "dentro" : "excedido")
-        : "sin_datos",
-    }));
+    // 2. Obtener horas reales desde MongoDB (comentarios con campo hh)
+    const mongoHours = {}; // ticket_ref -> total horas
+    const mongoPipeline = [
+      { $unwind: "$commentaries" },
+      { $match: { "commentaries.hh": { $exists: true, $gt: 0 } } },
+      {
+        $group: {
+          _id: "$title",
+          totalHH: { $sum: { $divide: ["$commentaries.hh", 60] } } // minutos a horas
+        }
+      }
+    ];
+    try {
+      const mongoResults = await db.collection("incidents").aggregate(mongoPipeline).toArray();
+      mongoResults.forEach(r => {
+        // Extraer #XYZ del título de MongoDB
+        const ref = (r._id || "").match(/#\d+/);
+        if (ref) {
+          mongoHours[ref[0]] = Math.round(r.totalHH * 100) / 100;
+        }
+      });
+      console.log("Horas desde MongoDB:", Object.keys(mongoHours).length, "tickets");
+    } catch (e) {
+      console.log("Error leyendo MongoDB:", e.message);
+    }
 
-    const totalConEst = tickets.length;
-    const conReales = tickets.filter(t => t.horas_reales !== null);
-    const dentro = conReales.filter(t => t.horas_reales <= t.horas_estimadas);
-    const excedido = conReales.filter(t => t.horas_reales > t.horas_estimadas);
+    // 3. Cruzar datos: Excel + MongoDB
+    const comparacion = tickets.map(t => {
+      const reales = mongoHours[t.ticket_ref] || t.horas_reales || null;
+      return {
+        ticket_ref: t.ticket_ref,
+        title: t.title,
+        a_cargo_de: t.a_cargo_de,
+        estado: t.estado,
+        prioridad: t.prioridad,
+        horas_estimadas: t.horas_estimadas,
+        horas_reales: reales,
+        desviacion_pct: t.horas_estimadas > 0 && reales !== null
+          ? Math.round(((t.horas_estimadas - reales) / t.horas_estimadas) * 100 * 10) / 10
+          : null,
+        categoria: t.horas_estimadas > 0 && reales !== null
+          ? (reales <= t.horas_estimadas ? "dentro" : "excedido")
+          : "sin_datos",
+      };
+    });
+
+    const conReales = comparacion.filter(t => t.horas_reales !== null);
+    const dentro = conReales.filter(t => t.categoria === "dentro");
+    const excedido = conReales.filter(t => t.categoria === "excedido");
 
     const resumen = {
-      total_con_estimacion: totalConEst,
+      total_con_estimacion: tickets.length,
       total_con_reales: conReales.length,
       dentro_estimacion: dentro.length,
       excedido: excedido.length,
-      promedio_horas_reales: conReales.length ? Math.round(conReales.reduce((s, t) => s + t.horas_reales, 0) / conReales.length * 10) / 10 : 0,
-      promedio_horas_estimadas: Math.round(tickets.reduce((s, t) => s + t.horas_estimadas, 0) / tickets.length * 10) / 10,
+      promedio_horas_reales: conReales.length
+        ? Math.round(conReales.reduce((s, t) => s + t.horas_reales, 0) / conReales.length * 10) / 10
+        : 0,
+      promedio_horas_estimadas: tickets.length
+        ? Math.round(tickets.reduce((s, t) => s + t.horas_estimadas, 0) / tickets.length * 10) / 10
+        : 0,
     };
 
     // Por estado
     const estadoMap = {};
-    tickets.forEach(t => {
+    comparacion.forEach(t => {
       const e = t.estado || "Sin estado";
       if (!estadoMap[e]) estadoMap[e] = { count: 0, totalHH: 0 };
       estadoMap[e].count++;
       if (t.horas_reales !== null) estadoMap[e].totalHH += t.horas_reales;
     });
-    const por_estado = Object.entries(estadoMap).map(([estado, v]) => ({
-      estado,
-      cantidad: v.count,
-      promedio_horas: v.count > 0 ? Math.round(v.totalHH / v.count * 10) / 10 : 0,
-    })).sort((a, b) => b.cantidad - a.cantidad);
+    const por_estado = Object.entries(estadoMap)
+      .map(([estado, v]) => ({ estado, cantidad: v.count, promedio_horas: v.count > 0 ? Math.round(v.totalHH / v.count * 10) / 10 : 0 }))
+      .sort((a, b) => b.cantidad - a.cantidad);
 
-    // Tickets con cambio de estado más antiguo
+    // Tickets antiguos
     const { data: antiguos } = await supabase
       .from("tickets_elecmetal")
       .select("ticket_ref, title, estado, a_cargo_de, cambio_estado, dias")
