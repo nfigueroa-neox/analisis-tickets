@@ -584,6 +584,7 @@
           <label>Hasta (fecha creación)</label>
           <input type="date" id="excelFechaFin">
         </div>
+        <button class="btn" onclick="cargarAnalisis()" style="height:38px;">🔍 Consultar</button>
       </div>
 
       <div id="excelLoading" class="loading">
@@ -1255,6 +1256,10 @@
 
     // Cargar análisis
     async function cargarAnalisis() {
+      const loading = document.getElementById('excelLoading');
+      const msg = document.getElementById('excelLoadingMsg');
+      loading.classList.add('active');
+      msg.textContent = 'Consultando...';
       try {
         const empresa = document.getElementById('excelEmpresa').value;
         const inicio = document.getElementById('excelFechaInicio').value;
@@ -1262,14 +1267,13 @@
         const params = new URLSearchParams({ empresa });
         if (inicio) params.set('inicio', inicio);
         if (fin) params.set('fin', fin);
-
         const res = await fetch(`/api/excel/analisis?${params}`);
         const data = await res.json();
         if (data.error) return;
-
         document.getElementById('excelResults').style.display = 'block';
         renderExcelAnalysis(data);
-      } catch (e) {}
+      } catch (e) { console.error('Error cargarAnalisis:', e); }
+      finally { loading.classList.remove('active'); }
     }
 
     function renderExcelAnalysis(data) {
