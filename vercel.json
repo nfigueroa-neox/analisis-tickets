@@ -1,21 +1,11 @@
 {
-  "version": 2,
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist/browser",
-  "builds": [
-    {
-      "src": "backend/api/**/*.js",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": [
-          "backend/**"
-        ]
-      }
+  "functions": {
+    "backend/api/**/*.js": {
+      "memory": 256,
+      "includeFiles": "backend/**"
     }
-  ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "backend/api/index.js" },
-    { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/index.html" }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/backend/api/index.js" }
   ]
 }
