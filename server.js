@@ -627,7 +627,6 @@ app.post("/api/excel/upload", requireAdmin, upload.single("file"), async (req, r
       prioridad: row[6] || null,
       tipo: row[7] || null,
       horas_estimadas: parseFloat(row[8]) || null,
-      horas_reales: parseFloat(row[9]) || null,
       vb_george: row[10] || null,
       se_aplica_en: row[11] || null,
       horas_diarias: horasDiarias,
@@ -697,17 +696,18 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
 
     // 2. Obtener horas reales desde MongoDB (comentarios con campo hh)
     const mongoHours = {}; // ticket_ref -> total horas
-    const mongoPipeline = [
-      { $unwind: "$commentaries" },
-      { $match: { "commentaries.hh": { $exists: true, $gt: 0 } } },
-      {
-        $group: {
-          _id: "$title",
-          totalHH: { $sum: { $divide: ["$commentaries.hh", 60] } } // minutos a horas
-        }
-      }
-    ];
     try {
+      await getDB();
+      const mongoPipeline = [
+        { $unwind: "$commentaries" },
+        { $match: { "commentaries.hh": { $exists: true, $gt: 0 } } },
+        {
+          $group: {
+            _id: "$title",
+            totalHH: { $sum: { $divide: ["$commentaries.hh", 60] } }
+          }
+        }
+      ];
       const mongoResults = await db.collection("incidents").aggregate(mongoPipeline).toArray();
       mongoResults.forEach(r => {
         // Extraer #XYZ del título de MongoDB
