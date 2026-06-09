@@ -1005,7 +1005,7 @@
             }
           }
         },
-        plugins: [{
+        plugins: [donutLabelsPlugin, {
           id: 'centerText',
           beforeDraw(chart) {
             const {width, height, ctx} = chart;
@@ -1172,17 +1172,20 @@
             }
           }
         },
-        plugins: [{
+        plugins: [donutLabelsPlugin, {
           id: 'priorityCenter',
           beforeDraw(chart) {
             const {width, height, ctx} = chart;
             const total = data.hoursByPriority.reduce((s, d) => s + d.hours, 0);
             ctx.save();
-            ctx.font = 'bold 18px sans-serif';
+            ctx.font = 'bold 14px sans-serif';
             ctx.fillStyle = '#1a1a2e';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(total + ' HH', width / 2, height / 2);
+            ctx.fillText(Math.round(total) + ' HH', width / 2, height / 2 - 6);
+            ctx.font = '10px sans-serif';
+            ctx.fillStyle = '#888';
+            ctx.fillText('Total', width / 2, height / 2 + 12);
             ctx.restore();
           }
         }]
@@ -1378,7 +1381,8 @@
             backgroundColor: ['#2ecc71', '#e74c3c', '#ffd700', '#95a5a6'],
           }]
         },
-        options: { responsive: true, cutout: '60%', plugins: { legend: { position: 'right' } } }
+        options: { responsive: true, cutout: '60%', plugins: { legend: { position: 'right' } } },
+        plugins: [donutLabelsPlugin]
       });
 
       // Chart: promedio (barra simple)
@@ -1557,6 +1561,36 @@
       div.textContent = text;
       return div.innerHTML;
     }
+
+    // ─── Plugin para mostrar % dentro de segmentos del donut ───────────
+    const donutLabelsPlugin = {
+      id: 'donutLabels',
+      afterDraw(chart) {
+        const { ctx } = chart;
+        chart.data.datasets.forEach((ds, di) => {
+          const meta = chart.getDatasetMeta(di);
+          if (!meta.data) return;
+          const total = ds.data.reduce((a, b) => a + b, 0);
+          if (total === 0) return;
+          meta.data.forEach((arc, i) => {
+            const value = ds.data[i];
+            if (value === 0) return;
+            const pct = Math.round((value / total) * 100) + '%';
+            const center = arc.getCenterPoint();
+            ctx.save();
+            ctx.font = 'bold 12px sans-serif';
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            // Sombra para legibilidad
+            ctx.shadowColor = 'rgba(0,0,0,0.3)';
+            ctx.shadowBlur = 2;
+            ctx.fillText(pct, center.x, center.y);
+            ctx.restore();
+          });
+        });
+      }
+    };
 
     // ─── Descargar chart como PNG ──────────────────────────────────────
     function downloadChart(canvasId, filename) {
