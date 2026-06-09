@@ -609,15 +609,24 @@
         <!-- Charts -->
         <div class="charts-row">
           <div class="chart-box">
-            <h3>📊 Estimación vs Reales</h3>
+            <h3 style="display:flex;justify-content:space-between;align-items:center;">
+              📊 Estimación vs Reales
+              <span onclick="downloadChart('chartEstimacion','estimacion_vs_reales')" style="cursor:pointer;font-size:16px;" title="Descargar PNG">📥</span>
+            </h3>
             <canvas id="chartEstimacion"></canvas>
           </div>
           <div class="chart-box">
-            <h3>🎯 Cumplimiento</h3>
+            <h3 style="display:flex;justify-content:space-between;align-items:center;">
+              🎯 Cumplimiento
+              <span onclick="downloadChart('chartCumplimiento','cumplimiento')" style="cursor:pointer;font-size:16px;" title="Descargar PNG">📥</span>
+            </h3>
             <canvas id="chartCumplimiento"></canvas>
           </div>
           <div class="chart-box">
-            <h3>📈 Promedio Horas</h3>
+            <h3 style="display:flex;justify-content:space-between;align-items:center;">
+              📈 Promedio Horas
+              <span onclick="downloadChart('chartPromedio','promedio_horas')" style="cursor:pointer;font-size:16px;" title="Descargar PNG">📥</span>
+            </h3>
             <canvas id="chartPromedio"></canvas>
           </div>
         </div>
