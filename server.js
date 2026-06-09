@@ -776,6 +776,46 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
   }
 });
 
+// ─── Setup: crear tabla si no existe ───────────────────────────────────────
+app.get("/api/setup", requireAdmin, async (req, res) => {
+  try {
+    const pool = getPgPool();
+    if (!pool) return res.json({ ok: false, message: "SUPABASE_URL no configurada" });
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tickets_elecmetal (
+        id SERIAL PRIMARY KEY,
+        ticket_ref VARCHAR(50),
+        title TEXT,
+        estado VARCHAR(100),
+        fecha_creacion DATE,
+        cambio_estado TIMESTAMP,
+        dias INTEGER,
+        a_cargo_de VARCHAR(200),
+        prioridad VARCHAR(50),
+        tipo VARCHAR(100),
+        horas_estimadas NUMERIC(10,2),
+        horas_reales NUMERIC(10,2),
+        vb_george VARCHAR(200),
+        se_aplica_en VARCHAR(200),
+        avance NUMERIC(5,2),
+        responsable_validacion VARCHAR(200),
+        avance_semana_anterior NUMERIC(5,2),
+        horas_diarias JSONB DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_tickets_elecmetal_estado ON tickets_elecmetal(estado);
+      CREATE INDEX IF NOT EXISTS idx_tickets_elecmetal_a_cargo ON tickets_elecmetal(a_cargo_de);
+      CREATE INDEX IF NOT EXISTS idx_tickets_elecmetal_ref ON tickets_elecmetal(ticket_ref);
+    `);
+
+    res.json({ ok: true, message: "Tabla tickets_elecmetal creada/verificada" });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ─── Inicio local ──────────────────────────────────────────────────────────
 if (process.env.VERCEL !== "1") {
   (async () => {
