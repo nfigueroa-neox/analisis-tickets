@@ -7,7 +7,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
+    html, body {
+      height: 100%;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: #f0f2f5;
       color: #1a1a2e;
@@ -604,7 +605,7 @@
 
         // Login exitoso
         document.getElementById('loginScreen').classList.add('hidden');
-        document.getElementById('appContainer').style.display = 'block';
+        document.getElementById('appContainer').style.display = 'flex';
         document.getElementById('userInfo').textContent = `${data.user.name} (${data.user.email})`;
         loadAppData();
       } catch (err) {
@@ -632,7 +633,7 @@
         const data = await res.json();
         if (data.authenticated) {
           document.getElementById('loginScreen').classList.add('hidden');
-          document.getElementById('appContainer').style.display = 'block';
+          document.getElementById('appContainer').style.display = 'flex';
           document.getElementById('userInfo').textContent = `${data.user.name} (${data.user.email})`;
           loadAppData();
         }
