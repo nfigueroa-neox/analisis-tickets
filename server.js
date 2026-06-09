@@ -4,20 +4,26 @@ const bcrypt = require("bcryptjs");
 const session = require("express-session");
 
 const app = express();
-const PORT = 3456;
+const PORT = process.env.PORT || 3456;
 
-const MONGO_URI =
+const MONGO_URI = process.env.MONGO_URI ||
   "mongodb://nxsupport:nxsupport123..@ec2-13-58-73-2.us-east-2.compute.amazonaws.com:27017/nxsupport?retryWrites=true";
-const DB_NAME = "nxsupport";
+const DB_NAME = process.env.DB_NAME || "nxsupport";
+const SESSION_SECRET = process.env.SESSION_SECRET || "nxsupport-horas-secret-key-2024";
 
 let db;
 
 // ─── Session config ─────────────────────────────────────────────────────────
 app.use(session({
-  secret: "nxsupport-horas-secret-key-2024",
+  secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 8 * 60 * 60 * 1000 } // 8 horas
+  cookie: {
+    maxAge: 8 * 60 * 60 * 1000, // 8 horas
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  }
 }));
 
 // ─── Regex para extraer horas de texto ──────────────────────────────────────
