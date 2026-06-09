@@ -552,33 +552,38 @@
         <h1>📋 Análisis Cumplimiento</h1>
       </div>
 
-      <!-- Filtros -->
+      <!-- Sección de carga de Excel -->
+      <div class="table-section" style="margin-bottom:16px;">
+        <h3 style="margin-bottom:12px;">📤 Carga de Excel</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+          <div class="filter-group">
+            <label>Empresa</label>
+            <select id="excelEmpresa">
+              <option value="Elecmetal">Elecmetal</option>
+              <option value="Nexus">Nexus</option>
+              <option value="Toyota">Toyota</option>
+              <option value="Santander">Santander</option>
+              <option value="Neox">Neox</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-end;">
+            <input type="file" id="excelFileInput" accept=".xlsx" style="font-size:13px;">
+            <button class="btn" onclick="uploadExcel()" id="uploadBtn" disabled>📤 Cargar a BD</button>
+          </div>
+          <div style="font-size:12px;color:#888;" id="supaStatus">Verificando conexión...</div>
+        </div>
+      </div>
+
+      <!-- Filtros de análisis -->
       <div class="filters">
         <div class="filter-group">
-          <label>Empresa</label>
-          <select id="excelEmpresa">
-            <option value="Elecmetal">Elecmetal</option>
-            <option value="Nexus">Nexus</option>
-            <option value="Toyota">Toyota</option>
-            <option value="Santander">Santander</option>
-            <option value="Neox">Neox</option>
-          </select>
-        </div>
-        <div class="filter-group">
-          <label>Desde</label>
+          <label>Desde (fecha creación)</label>
           <input type="date" id="excelFechaInicio">
         </div>
         <div class="filter-group">
-          <label>Hasta</label>
+          <label>Hasta (fecha creación)</label>
           <input type="date" id="excelFechaFin">
         </div>
-        <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:4px;">
-          <input type="file" id="excelFileInput" accept=".xlsx" style="font-size:13px;">
-          <button class="btn" onclick="uploadExcel()" id="uploadBtn" disabled>📤 Cargar a BD</button>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-        <span id="supaStatus" style="font-size:13px;color:#888;">Verificando conexión...</span>
       </div>
 
       <div id="excelLoading" class="loading">
