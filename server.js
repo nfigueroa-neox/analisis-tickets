@@ -776,6 +776,27 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
   }
 });
 
+// ─── Diagnóstico de conexión ──────────────────────────────────────────────
+app.get("/api/db-check", async (req, res) => {
+  const dns = require("dns");
+  const host = "db.imsylcojgjhuyyqzlmlb.supabase.co";
+  try {
+    const addresses = await new Promise((resolve, reject) => {
+      dns.resolve4(host, (err, a) => { if (err) reject(err); else resolve(a); });
+    });
+    res.json({ host, ipv4: addresses, message: "DNS resuelve OK" });
+  } catch (e4) {
+    try {
+      const addresses = await new Promise((resolve, reject) => {
+        dns.resolve6(host, (err, a) => { if (err) reject(err); else resolve(a); });
+      });
+      res.json({ host, ipv4: null, ipv6: addresses, message: "Solo IPv6" });
+    } catch (e6) {
+      res.json({ host, error: { v4: e4.message, v6: e6.message }, message: "No resuelve" });
+    }
+  }
+});
+
 // ─── Setup: crear tabla si no existe ───────────────────────────────────────
 app.get("/api/setup", async (req, res) => {
   try {
