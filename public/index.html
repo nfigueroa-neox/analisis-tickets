@@ -1026,6 +1026,7 @@
                                         <th>HH Estimadas</th>
                                         <th>HH Reales</th>
                                         <th>Desviación</th>
+                                        <th>Días Valid.</th>
                                         <th>Resultado</th>
                                     </tr>
                                 </thead>
@@ -2186,6 +2187,7 @@
           <td>${t.horas_estimadas || "—"}</td>
           <td><strong>${t.horas_reales !== null ? t.horas_reales : "—"}</strong></td>
           <td>${t.desviacion_pct !== null ? t.desviacion_pct + "%" : "—"}</td>
+          <td>${t.dias_validacion ? t.dias_validacion + 'd' : "—"}</td>
           <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${cls};margin-right:4px;"></span>${labelMap[t.categoria] || "❓ Sin datos"}</td>
         </tr>`;
                         })
@@ -2257,6 +2259,7 @@
           <td>${t.horas_estimadas || "—"}</td>
           <td><strong>${t.horas_reales !== null ? t.horas_reales : "—"}</strong></td>
           <td>${t.desviacion_pct !== null ? t.desviacion_pct + "%" : "—"}</td>
+          <td>${t.dias_validacion ? t.dias_validacion + 'd' : "—"}</td>
           <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${cls};margin-right:4px;"></span>${labelMap[t.categoria] || "❓ Sin datos"}</td>
         </tr>`;
                         })

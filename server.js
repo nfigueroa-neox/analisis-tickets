@@ -809,6 +809,7 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
 
     // 2. Obtener horas reales desde MongoDB (comentarios con campo hh)
     const mongoHours = {};
+    const validationDays = {}; // ticket_ref -> dias en validacion
     try {
       await getDB();
       const pipeline = [
@@ -829,11 +830,62 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
         const ref = (r._id || "").match(/#\d+/);
         if (ref) mongoHours[ref[0]] = Math.round(r.totalHH * 100) / 100;
       });
+
+      // 2b. Calcular días en validación para tickets relevantes
+      const enValidacionRefs = tickets
+        .filter((t) => t.estado && /validaci/i.test(t.estado))
+        .map((t) => t.ticket_ref);
+
+      if (enValidacionRefs.length > 0) {
+        // Buscar en MongoDB los statusChanges de estos tickets
+        const mongoTickets = await db
+          .collection("incidents")
+          .find({
+            title: { $in: enValidacionRefs.map((r) => new RegExp(r, "i")) },
+          })
+          .project({ title: 1, status: 1, statusChanges: 1 })
+          .toArray();
+
+        mongoTickets.forEach((mt) => {
+          const ref = (mt.title || "").match(/#\d+/);
+          if (!ref) return;
+          const ticketRef = ref[0];
+          const changes = mt.statusChanges || [];
+
+          // Encontrar fecha de entrada a validación
+          let fechaValidacion = null;
+          let fechaPausa = null;
+
+          changes.forEach((sc) => {
+            const st = (sc.status || "").toLowerCase();
+            if (st.includes("validaci")) {
+              fechaValidacion = new Date(sc.date);
+            }
+            if (st === "pausado") {
+              fechaPausa = new Date(sc.date);
+            }
+          });
+
+          if (fechaValidacion && fechaPausa && fechaPausa > fechaValidacion) {
+            const diffMs = fechaPausa - fechaValidacion;
+            const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+            validationDays[ticketRef] = diffDays;
+          } else if (fechaValidacion && !fechaPausa) {
+            // Aún en validación, medir hasta hoy
+            const diffMs = Date.now() - fechaValidacion;
+            const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+            validationDays[ticketRef] = diffDays;
+          }
+        });
+      }
+
       console.log(
         "MongoDB:",
         results.length,
         "tickets con hh, matched:",
         Object.keys(mongoHours).length,
+        "validation:",
+        Object.keys(validationDays).length,
       );
     } catch (e) {
       console.log("Error MongoDB:", e.message);
@@ -850,6 +902,7 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
         prioridad: t.prioridad,
         horas_estimadas: t.horas_estimadas,
         horas_reales: reales,
+        dias_validacion: validationDays[t.ticket_ref] || null,
         desviacion_pct:
           t.horas_estimadas > 0 && reales !== null
             ? Math.round(
