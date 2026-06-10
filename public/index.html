@@ -2060,16 +2060,42 @@
                             onClick: (event, activeElements) => {
                                 const sel =
                                     document.getElementById("filtroResultado");
-                                if (activeElements.length > 0) {
+                                // Detectar si es click en el centro
+                                const chart = event.chart;
+                                const rect =
+                                    chart.canvas.getBoundingClientRect();
+                                const mx = event.clientX - rect.left;
+                                const my = event.clientY - rect.top;
+                                const chartRect = chart.chartArea;
+                                const cx =
+                                    (chartRect.left + chartRect.right) / 2;
+                                const cy =
+                                    (chartRect.top + chartRect.bottom) / 2;
+                                const dist = Math.sqrt(
+                                    (mx - cx) ** 2 + (my - cy) ** 2,
+                                );
+                                const outerR =
+                                    Math.min(
+                                        chartRect.right - chartRect.left,
+                                        chartRect.bottom - chartRect.top,
+                                    ) / 2;
+                                const innerR = outerR * 0.6; // cutout 60%
+                                if (
+                                    dist < innerR ||
+                                    !activeElements ||
+                                    activeElements.length === 0
+                                ) {
+                                    sel.value = "todas";
+                                } else {
                                     const labels = [
                                         "dentro",
                                         "excedido",
                                         "en_validacion",
                                         "sin_datos",
                                     ];
-                                    sel.value = labels[activeElements[0].index];
-                                } else {
-                                    sel.value = "todas";
+                                    sel.value =
+                                        labels[activeElements[0].index] ||
+                                        "todas";
                                 }
                                 filtrarTablaComparacion();
                             },
