@@ -831,53 +831,12 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
         if (ref) mongoHours[ref[0]] = Math.round(r.totalHH * 100) / 100;
       });
 
-      // 2b. Calcular días en validación para tickets relevantes
-      const enValidacionRefs = tickets
-        .filter((t) => t.estado && /validaci/i.test(t.estado))
-        .map((t) => t.ticket_ref);
-
-      if (enValidacionRefs.length > 0) {
-        // Buscar en MongoDB los statusChanges de estos tickets
-        const mongoTickets = await db
-          .collection("incidents")
-          .find({
-            title: { $in: enValidacionRefs.map((r) => new RegExp(r, "i")) },
-          })
-          .project({ title: 1, status: 1, statusChanges: 1 })
-          .toArray();
-
-        mongoTickets.forEach((mt) => {
-          const ref = (mt.title || "").match(/#\d+/);
-          if (!ref) return;
-          const ticketRef = ref[0];
-          const changes = mt.statusChanges || [];
-
-          // Encontrar fecha de entrada a validación
-          let fechaValidacion = null;
-          let fechaPausa = null;
-
-          changes.forEach((sc) => {
-            const st = (sc.status || "").toLowerCase();
-            if (st.includes("validaci")) {
-              fechaValidacion = new Date(sc.date);
-            }
-            if (st === "pausado") {
-              fechaPausa = new Date(sc.date);
-            }
-          });
-
-          if (fechaValidacion && fechaPausa && fechaPausa > fechaValidacion) {
-            const diffMs = fechaPausa - fechaValidacion;
-            const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-            validationDays[ticketRef] = diffDays;
-          } else if (fechaValidacion && !fechaPausa) {
-            // Aún en validación, medir hasta hoy
-            const diffMs = Date.now() - fechaValidacion;
-            const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-            validationDays[ticketRef] = diffDays;
-          }
-        });
-      }
+      // 2b. Días en validación desde el Excel (columna "Días")
+      tickets.forEach((t) => {
+        if (t.estado && /validaci/i.test(t.estado) && t.dias) {
+          validationDays[t.ticket_ref] = t.dias;
+        }
+      });
 
       console.log(
         "MongoDB:",
