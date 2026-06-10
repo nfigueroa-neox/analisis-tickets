@@ -6,10 +6,12 @@ const cookieSession = require("cookie-session");
 const app = express();
 const PORT = process.env.PORT || 3456;
 
-const MONGO_URI = process.env.MONGO_URI ||
+const MONGO_URI =
+  process.env.MONGO_URI ||
   "mongodb://nxsupport:nxsupport123..@ec2-13-58-73-2.us-east-2.compute.amazonaws.com:27017/nxsupport?retryWrites=true";
 const DB_NAME = process.env.DB_NAME || "nxsupport";
-const SESSION_SECRET = process.env.SESSION_SECRET || "nxsupport-horas-secret-key-2024";
+const SESSION_SECRET =
+  process.env.SESSION_SECRET || "nxsupport-horas-secret-key-2024";
 
 let db;
 let excelPriorityMap = {}; // #XYZ -> prioridad
@@ -18,9 +20,14 @@ let excelPriorityMap = {}; // #XYZ -> prioridad
 function loadExcel() {
   try {
     const X = require("xlsx");
-    const wb = X.readFile(process.env.EXCEL_PATH || "./_Ticket_Elecmental.xlsx");
+    const wb = X.readFile(
+      process.env.EXCEL_PATH || "./_Ticket_Elecmental.xlsx",
+    );
     const sheet = wb.Sheets["NEOX Elecmetal"];
-    if (!sheet) { console.log("Sheet NEOX Elecmetal no encontrada"); return; }
+    if (!sheet) {
+      console.log("Sheet NEOX Elecmetal no encontrada");
+      return;
+    }
     const data = X.utils.sheet_to_json(sheet, { defval: "" });
     data.forEach((r) => {
       const title = (r["1"] || "").trim();
@@ -33,7 +40,9 @@ function loadExcel() {
         }
       }
     });
-    console.log(`Excel cargado: ${Object.keys(excelPriorityMap).length} tickets con prioridad`);
+    console.log(
+      `Excel cargado: ${Object.keys(excelPriorityMap).length} tickets con prioridad`,
+    );
   } catch (e) {
     console.log("Excel no disponible:", e.message);
   }
@@ -42,10 +51,10 @@ loadExcel();
 
 // ─── Mapeo de prioridad a color ─────────────────────────────────────────────
 const PRIO_MAP = {
-  "Crítica": { color: "#e74c3c", level: "alta", order: 0 },
-  "Mayor":   { color: "#e74c3c", level: "alta", order: 0 },
-  "Media":   { color: "#f1c40f", level: "media", order: 1 },
-  "Menor":   { color: "#2ecc71", level: "baja", order: 2 },
+  Crítica: { color: "#e74c3c", level: "alta", order: 0 },
+  Mayor: { color: "#e74c3c", level: "alta", order: 0 },
+  Media: { color: "#f1c40f", level: "media", order: 1 },
+  Menor: { color: "#2ecc71", level: "baja", order: 2 },
 };
 
 function getPriorityFromTicket(title) {
@@ -59,14 +68,16 @@ function getPriorityFromTicket(title) {
 app.set("trust proxy", 1);
 
 // ─── Session config (cookie-based, sin estado - ideal para Vercel) ──────────
-app.use(cookieSession({
-  name: "session",
-  secret: SESSION_SECRET,
-  maxAge: 8 * 60 * 60 * 1000, // 8 horas
-  httpOnly: true,
-  sameSite: "lax",
-  secure: false, // Vercel maneja HTTPS externamente
-}));
+app.use(
+  cookieSession({
+    name: "session",
+    secret: SESSION_SECRET,
+    maxAge: 8 * 60 * 60 * 1000, // 8 horas
+    httpOnly: true,
+    sameSite: "lax",
+    secure: false, // Vercel maneja HTTPS externamente
+  }),
+);
 
 // Vercel requiere mantener la conexión MongoDB viva entre requests
 let dbPromise = null;
@@ -188,7 +199,12 @@ app.use(express.static("public"));
 
 // ─── Auth middleware ────────────────────────────────────────────────────────
 function requireAdmin(req, res, next) {
-  if (req.session && req.session.user && req.session.user.roles && req.session.user.roles.includes("ADMIN")) {
+  if (
+    req.session &&
+    req.session.user &&
+    req.session.user.roles &&
+    req.session.user.roles.includes("ADMIN")
+  ) {
     return next();
   }
   return res.status(401).json({ error: "No autorizado", login: true });
@@ -204,7 +220,9 @@ app.post("/api/login", async (req, res) => {
       return res.status(400).json({ error: "Email y contraseña requeridos" });
     }
 
-    const user = await (await getDB()).collection("users").findOne({ email: email.toLowerCase() });
+    const user = await (await getDB())
+      .collection("users")
+      .findOne({ email: email.toLowerCase() });
     if (!user) {
       return res.status(401).json({ error: "Credenciales inválidas" });
     }
@@ -215,7 +233,9 @@ app.post("/api/login", async (req, res) => {
     }
 
     if (!user.roles || !user.roles.includes("ADMIN")) {
-      return res.status(403).json({ error: "Sin permisos de administrador", noAdmin: true });
+      return res
+        .status(403)
+        .json({ error: "Sin permisos de administrador", noAdmin: true });
     }
 
     req.session.user = {
@@ -257,7 +277,9 @@ app.get("/api/session", (req, res) => {
 // 1. Lista de usuarios (con nombre y email)
 app.get("/api/users", requireAdmin, async (req, res) => {
   try {
-    const users = await (await getDB())
+    const users = await (
+      await getDB()
+    )
       .collection("users")
       .find(
         {},
@@ -283,7 +305,9 @@ app.get("/api/users", requireAdmin, async (req, res) => {
 // 2. Lista de empresas
 app.get("/api/companies", requireAdmin, async (req, res) => {
   try {
-    const companiesFromCol = await (await getDB())
+    const companiesFromCol = await (
+      await getDB()
+    )
       .collection("companies")
       .find({}, { projection: { name: 1, _id: 0 } })
       .toArray();
@@ -294,7 +318,8 @@ app.get("/api/companies", requireAdmin, async (req, res) => {
       .collection("incidents")
       .distinct("company");
     const realCompanies = incidentCompanies.filter(
-      (c) => /^[a-záéíóúñü]{3,}(\s[a-záéíóúñü]{2,}){0,3}$/i.test(c) && c.length < 40
+      (c) =>
+        /^[a-záéíóúñü]{3,}(\s[a-záéíóúñü]{2,}){0,3}$/i.test(c) && c.length < 40,
     );
     companies = [...new Set([...companies, ...realCompanies])].sort();
 
@@ -315,7 +340,7 @@ app.get("/api/hours", requireAdmin, async (req, res) => {
 
     const userEmail = user.toLowerCase();
     const startDate = start ? new Date(start) : new Date("2020-01-01");
-    const endDate = end ? new Date(end) : new Date();
+    const endDate = end ? new Date(end + "T23:59:59.999Z") : new Date();
 
     // Cargar SLA de MongoDB (prioridad real)
     const slaMap = {}; // ticketNumber -> tipo (mayor/media/menor)
@@ -323,12 +348,15 @@ app.get("/api/hours", requireAdmin, async (req, res) => {
       await getDB();
       const slas = await db.collection("slas").find({}).toArray();
       const slaById = {};
-      slas.forEach(s => { slaById[s._id.toString()] = s.type; });
-      const ticketsConSla = await db.collection("incidents")
+      slas.forEach((s) => {
+        slaById[s._id.toString()] = s.type;
+      });
+      const ticketsConSla = await db
+        .collection("incidents")
         .find({ sla: { $exists: true } })
         .project({ ticketNumber: 1, sla: 1 })
         .toArray();
-      ticketsConSla.forEach(t => {
+      ticketsConSla.forEach((t) => {
         if (t.sla) {
           const type = slaById[t.sla.toString()];
           if (type) slaMap[t.ticketNumber] = type;
@@ -423,8 +451,14 @@ app.get("/api/hours", requireAdmin, async (req, res) => {
           const slaType = slaMap[c.ticketNumber] || null;
           const prio = slaType || getPriorityFromTicket(c.title);
           // Normalizar: primera letra mayúscula ("mayor" -> "Mayor")
-          const prioKey = prio ? prio.charAt(0).toUpperCase() + prio.slice(1).toLowerCase() : null;
-          const prioInfo = PRIO_MAP[prioKey] || { color: "#95a5a6", level: "sin prioridad", order: 3 };
+          const prioKey = prio
+            ? prio.charAt(0).toUpperCase() + prio.slice(1).toLowerCase()
+            : null;
+          const prioInfo = PRIO_MAP[prioKey] || {
+            color: "#95a5a6",
+            level: "sin prioridad",
+            order: 3,
+          };
           hoursByTicket[ticketKey] = {
             ticketNumber: c.ticketNumber,
             title: c.title,
@@ -460,12 +494,22 @@ app.get("/api/hours", requireAdmin, async (req, res) => {
 
     // Calcular horas por prioridad
     const hoursByPriority = {};
-    Object.values(hoursByTicket).forEach(t => {
+    Object.values(hoursByTicket).forEach((t) => {
       const level = t.priorityLevel || "sin prioridad";
       hoursByPriority[level] = (hoursByPriority[level] || 0) + t.totalHours;
     });
-    const priorityLabels = { alta: "Alta", media: "Media", baja: "Baja", "sin prioridad": "Sin prioridad" };
-    const priorityColors = { alta: "#e74c3c", media: "#f1c40f", baja: "#2ecc71", "sin prioridad": "#95a5a6" };
+    const priorityLabels = {
+      alta: "Alta",
+      media: "Media",
+      baja: "Baja",
+      "sin prioridad": "Sin prioridad",
+    };
+    const priorityColors = {
+      alta: "#e74c3c",
+      media: "#f1c40f",
+      baja: "#2ecc71",
+      "sin prioridad": "#95a5a6",
+    };
 
     const hoursByPriorityArr = Object.entries(hoursByPriority)
       .map(([level, hrs]) => ({
@@ -573,14 +617,19 @@ app.get("/api/ticket/:ticketNumber", requireAdmin, async (req, res) => {
 app.get("/api/excel/status", requireAdmin, async (req, res) => {
   try {
     const supabase = getSupabase();
-    if (!supabase) return res.json({ connected: false, message: "Supabase no configurado" });
+    if (!supabase)
+      return res.json({ connected: false, message: "Supabase no configurado" });
 
     const { data, error, count } = await supabase
       .from("tickets_elecmetal")
       .select("*", { count: "exact", head: true });
 
     if (error && error.code === "PGRST116") {
-      return res.json({ connected: true, total: 0, message: "Tabla no creada aún" });
+      return res.json({
+        connected: true,
+        total: 0,
+        message: "Tabla no creada aún",
+      });
     }
 
     res.json({ connected: true, total: count || 0 });
@@ -590,119 +639,149 @@ app.get("/api/excel/status", requireAdmin, async (req, res) => {
 });
 
 // 2. Subir Excel y sincronizar con Supabase (batch optimizado)
-app.post("/api/excel/upload", requireAdmin, upload.single("file"), async (req, res) => {
-  try {
-    const supabase = getSupabase();
-    if (!supabase) return res.status(400).json({ error: "Supabase no configurado" });
+app.post(
+  "/api/excel/upload",
+  requireAdmin,
+  upload.single("file"),
+  async (req, res) => {
+    try {
+      const supabase = getSupabase();
+      if (!supabase)
+        return res.status(400).json({ error: "Supabase no configurado" });
 
-    const X = require("xlsx");
-    const wb = X.read(req.file.buffer, { type: "buffer" });
-    const sheet = wb.Sheets["NEOX Elecmetal"];
-    if (!sheet) return res.status(400).json({ error: "Hoja 'NEOX Elecmetal' no encontrada" });
+      const X = require("xlsx");
+      const wb = X.read(req.file.buffer, { type: "buffer" });
+      const sheet = wb.Sheets["NEOX Elecmetal"];
+      if (!sheet)
+        return res
+          .status(400)
+          .json({ error: "Hoja 'NEOX Elecmetal' no encontrada" });
 
-    const data = X.utils.sheet_to_json(sheet, { defval: null, header: 1 });
-    if (data.length < 2) return res.status(400).json({ error: "Excel vacío" });
+      const data = X.utils.sheet_to_json(sheet, { defval: null, header: 1 });
+      if (data.length < 2)
+        return res.status(400).json({ error: "Excel vacío" });
 
-    const headers = data[0];
-    const rows = data.slice(1);
+      const headers = data[0];
+      const rows = data.slice(1);
 
-    // Convertir fecha Excel (número serial) a ISO string
-    function parseExcelDate(val) {
-      if (!val) return null;
-      if (typeof val === "number") {
-        const d = new Date((val - 2) * 86400000 + Date.UTC(1900, 0, 1));
-        return d.toISOString().slice(0, 10);
+      // Convertir fecha Excel (número serial) a ISO string
+      function parseExcelDate(val) {
+        if (!val) return null;
+        if (typeof val === "number") {
+          const d = new Date((val - 2) * 86400000 + Date.UTC(1900, 0, 1));
+          return d.toISOString().slice(0, 10);
+        }
+        if (typeof val === "string" && val.match(/^\d{4}/))
+          return val.slice(0, 10);
+        try {
+          return new Date(val).toISOString().slice(0, 10);
+        } catch (e) {
+          return null;
+        }
       }
-      if (typeof val === "string" && val.match(/^\d{4}/)) return val.slice(0, 10);
-      try { return new Date(val).toISOString().slice(0, 10); } catch (e) { return null; }
-    }
 
-    const empresa = req.body.empresa || "Elecmetal";
+      const empresa = req.body.empresa || "Elecmetal";
 
-    // 1. Obtener todos los ticket_ref existentes de una sola vez
-  const { data: existentes } = await supabase
-    .from("tickets_elecmetal")
-    .select("ticket_ref");
-  const refsExistentes = new Set((existentes || []).map(r => r.ticket_ref));
+      // 1. Obtener todos los ticket_ref existentes de una sola vez
+      const { data: existentes } = await supabase
+        .from("tickets_elecmetal")
+        .select("ticket_ref");
+      const refsExistentes = new Set(
+        (existentes || []).map((r) => r.ticket_ref),
+      );
 
-  const nuevos = [];
-  let actualizados = 0;
+      const nuevos = [];
+      let actualizados = 0;
 
-  for (const row of rows) {
-    const title = (row[0] || "").toString().trim();
-    if (!title) continue;
-    const ticketRef = title.match(/#\d+/)?.[0] || null;
-    if (!ticketRef) continue;
+      for (const row of rows) {
+        const title = (row[0] || "").toString().trim();
+        if (!title) continue;
+        const ticketRef = title.match(/#\d+/)?.[0] || null;
+        if (!ticketRef) continue;
 
-    const horasDiarias = {};
-    for (let i = 12; i < headers.length; i++) {
-      const h = headers[i];
-      if (h && !h.toString().startsWith("__EMPTY") && row[i] !== null && row[i] !== "") {
-        const val = parseFloat(row[i]);
-        if (!isNaN(val) && val > 0) horasDiarias[h.toString().trim()] = val;
+        const horasDiarias = {};
+        for (let i = 12; i < headers.length; i++) {
+          const h = headers[i];
+          if (
+            h &&
+            !h.toString().startsWith("__EMPTY") &&
+            row[i] !== null &&
+            row[i] !== ""
+          ) {
+            const val = parseFloat(row[i]);
+            if (!isNaN(val) && val > 0) horasDiarias[h.toString().trim()] = val;
+          }
+        }
+
+        const record = {
+          empresa,
+          ticket_ref: ticketRef,
+          title,
+          estado: row[4] || null,
+          a_cargo_de: row[5] || null,
+          prioridad: row[6] || null,
+          tipo: row[7] || null,
+          horas_estimadas: (() => {
+            const raw = String(row[8] || "");
+            // Intentar rango "4 - 8" -> tomar el mayor
+            const rango = raw.match(
+              /≈?\s*(\d+[\.]?\d*)\s*[-–]\s*(\d+[\.]?\d*)/,
+            );
+            if (rango) return parseFloat(rango[2]); // valor mayor
+            const v = parseFloat(raw);
+            return v && v > 0 && v < 500 ? v : null;
+          })(), // Soporta rangos "4-8" (toma el mayor), filtra seriales > 500
+          vb_george: row[10] || null,
+          se_aplica_en: row[11] || null,
+          horas_diarias: horasDiarias,
+          avance: parseFloat(row[row.length - 3]) || null,
+          responsable_validacion: row[row.length - 2] || null,
+          avance_semana_anterior: parseFloat(row[row.length - 1]) || null,
+        };
+        const fc = row[1] ? parseExcelDate(row[1]) : null;
+        if (fc) record.fecha_creacion = fc;
+        const ce = row[2] ? parseExcelDate(row[2]) : null;
+        if (ce) record.cambio_estado = ce;
+        if (row[3] !== null && row[3] !== "")
+          record.dias = parseInt(row[3]) || null;
+
+        if (refsExistentes.has(ticketRef)) {
+          await supabase
+            .from("tickets_elecmetal")
+            .update(record)
+            .eq("ticket_ref", ticketRef);
+          actualizados++;
+        } else {
+          nuevos.push(record);
+        }
       }
-    }
 
-    const record = {
-      empresa,
-      ticket_ref: ticketRef,
-      title,
-      estado: row[4] || null,
-      a_cargo_de: row[5] || null,
-      prioridad: row[6] || null,
-      tipo: row[7] || null,
-      horas_estimadas: (() => {
-        const raw = String(row[8] || '');
-        // Intentar rango "4 - 8" -> tomar el mayor
-        const rango = raw.match(/≈?\s*(\d+[\.]?\d*)\s*[-–]\s*(\d+[\.]?\d*)/);
-        if (rango) return parseFloat(rango[2]); // valor mayor
-        const v = parseFloat(raw);
-        return (v && v > 0 && v < 500) ? v : null;
-      })(),  // Soporta rangos "4-8" (toma el mayor), filtra seriales > 500
-      vb_george: row[10] || null,
-      se_aplica_en: row[11] || null,
-      horas_diarias: horasDiarias,
-      avance: parseFloat(row[row.length - 3]) || null,
-      responsable_validacion: row[row.length - 2] || null,
-      avance_semana_anterior: parseFloat(row[row.length - 1]) || null,
-    };
-    const fc = row[1] ? parseExcelDate(row[1]) : null;
-    if (fc) record.fecha_creacion = fc;
-    const ce = row[2] ? parseExcelDate(row[2]) : null;
-    if (ce) record.cambio_estado = ce;
-    if (row[3] !== null && row[3] !== "") record.dias = parseInt(row[3]) || null;
-
-    if (refsExistentes.has(ticketRef)) {
-      await supabase.from("tickets_elecmetal").update(record).eq("ticket_ref", ticketRef);
-      actualizados++;
-    } else {
-      nuevos.push(record);
-    }
-  }
-
-  // 2. Insertar todos los nuevos en un solo batch
-    let insertados = 0;
-    if (nuevos.length > 0) {
-      // Insertar en lotes de 50 para no exceder límites
-      for (let i = 0; i < nuevos.length; i += 50) {
-        const lote = nuevos.slice(i, i + 50);
-        const { error } = await supabase.from("tickets_elecmetal").insert(lote);
-        if (error) throw error;
-        insertados += lote.length;
+      // 2. Insertar todos los nuevos en un solo batch
+      let insertados = 0;
+      if (nuevos.length > 0) {
+        // Insertar en lotes de 50 para no exceder límites
+        for (let i = 0; i < nuevos.length; i += 50) {
+          const lote = nuevos.slice(i, i + 50);
+          const { error } = await supabase
+            .from("tickets_elecmetal")
+            .insert(lote);
+          if (error) throw error;
+          insertados += lote.length;
+        }
       }
-    }
 
-    res.json({
-      ok: true,
-      insertados,
-      actualizados,
-      total_filas: rows.filter(r => (r[0] || "").toString().trim()).length,
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
+      res.json({
+        ok: true,
+        insertados,
+        actualizados,
+        total_filas: rows.filter((r) => (r[0] || "").toString().trim()).length,
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
 
 // 3. Análisis: comparación estimación vs real (cruzando con MongoDB)
 app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
@@ -723,7 +802,9 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
       .gt("horas_estimadas", 0);
 
     query = query.gte("fecha_creacion", inicio).lte("fecha_creacion", fin);
-    const { data: tickets, error } = await query.order("horas_estimadas", { ascending: false });
+    const { data: tickets, error } = await query.order("horas_estimadas", {
+      ascending: false,
+    });
     if (error) throw error;
 
     // 2. Obtener horas reales desde MongoDB (comentarios con campo hh)
@@ -733,20 +814,33 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
       const pipeline = [
         { $unwind: "$commentaries" },
         { $match: { "commentaries.hh": { $exists: true, $gt: 0 } } },
-        { $group: { _id: "$title", totalHH: { $sum: { $divide: ["$commentaries.hh", 60] } } } }
+        {
+          $group: {
+            _id: "$title",
+            totalHH: { $sum: { $divide: ["$commentaries.hh", 60] } },
+          },
+        },
       ];
-      const results = await db.collection("incidents").aggregate(pipeline).toArray();
-      results.forEach(r => {
+      const results = await db
+        .collection("incidents")
+        .aggregate(pipeline)
+        .toArray();
+      results.forEach((r) => {
         const ref = (r._id || "").match(/#\d+/);
         if (ref) mongoHours[ref[0]] = Math.round(r.totalHH * 100) / 100;
       });
-      console.log("MongoDB:", results.length, "tickets con hh, matched:", Object.keys(mongoHours).length);
+      console.log(
+        "MongoDB:",
+        results.length,
+        "tickets con hh, matched:",
+        Object.keys(mongoHours).length,
+      );
     } catch (e) {
       console.log("Error MongoDB:", e.message);
     }
 
     // 3. Cruzar datos: Excel + MongoDB
-    const comparacion = tickets.map(t => {
+    const comparacion = tickets.map((t) => {
       const reales = mongoHours[t.ticket_ref] || t.horas_reales || null;
       return {
         ticket_ref: t.ticket_ref,
@@ -756,9 +850,12 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
         prioridad: t.prioridad,
         horas_estimadas: t.horas_estimadas,
         horas_reales: reales,
-        desviacion_pct: t.horas_estimadas > 0 && reales !== null
-          ? Math.round(((t.horas_estimadas - reales) / t.horas_estimadas) * 100 * 10) / 10
-          : null,
+        desviacion_pct:
+          t.horas_estimadas > 0 && reales !== null
+            ? Math.round(
+                ((t.horas_estimadas - reales) / t.horas_estimadas) * 100 * 10,
+              ) / 10
+            : null,
         categoria: (() => {
           if (!t.horas_estimadas > 0 || reales === null) return "sin_datos";
           if (t.estado && /validaci/i.test(t.estado)) return "en_validacion";
@@ -767,10 +864,12 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
       };
     });
 
-    const conReales = comparacion.filter(t => t.horas_reales !== null);
-    const dentro = conReales.filter(t => t.categoria === "dentro");
-    const excedido = conReales.filter(t => t.categoria === "excedido");
-    const enValidacion = comparacion.filter(t => t.categoria === "en_validacion");
+    const conReales = comparacion.filter((t) => t.horas_reales !== null);
+    const dentro = conReales.filter((t) => t.categoria === "dentro");
+    const excedido = conReales.filter((t) => t.categoria === "excedido");
+    const enValidacion = comparacion.filter(
+      (t) => t.categoria === "en_validacion",
+    );
 
     const resumen = {
       total_con_estimacion: tickets.length,
@@ -779,23 +878,36 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
       excedido: excedido.length,
       en_validacion: enValidacion.length,
       promedio_horas_reales: conReales.length
-        ? Math.round(conReales.reduce((s, t) => s + t.horas_reales, 0) / conReales.length * 10) / 10
+        ? Math.round(
+            (conReales.reduce((s, t) => s + t.horas_reales, 0) /
+              conReales.length) *
+              10,
+          ) / 10
         : 0,
       promedio_horas_estimadas: tickets.length
-        ? Math.round(tickets.reduce((s, t) => s + t.horas_estimadas, 0) / tickets.length * 10) / 10
+        ? Math.round(
+            (tickets.reduce((s, t) => s + t.horas_estimadas, 0) /
+              tickets.length) *
+              10,
+          ) / 10
         : 0,
     };
 
     // Por estado
     const estadoMap = {};
-    comparacion.forEach(t => {
+    comparacion.forEach((t) => {
       const e = t.estado || "Sin estado";
       if (!estadoMap[e]) estadoMap[e] = { count: 0, totalHH: 0 };
       estadoMap[e].count++;
       if (t.horas_reales !== null) estadoMap[e].totalHH += t.horas_reales;
     });
     const por_estado = Object.entries(estadoMap)
-      .map(([estado, v]) => ({ estado, cantidad: v.count, promedio_horas: v.count > 0 ? Math.round(v.totalHH / v.count * 10) / 10 : 0 }))
+      .map(([estado, v]) => ({
+        estado,
+        cantidad: v.count,
+        promedio_horas:
+          v.count > 0 ? Math.round((v.totalHH / v.count) * 10) / 10 : 0,
+      }))
       .sort((a, b) => b.cantidad - a.cantidad);
 
     // Tickets antiguos
@@ -806,9 +918,16 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
       .order("cambio_estado", { ascending: true })
       .limit(50);
 
-    const tickets_antiguos = (antiguos || []).map(t => ({
+    const tickets_antiguos = (antiguos || []).map((t) => ({
       ...t,
-      nivel_alerta: t.dias >= 90 ? "critico" : t.dias >= 30 ? "alerta" : t.dias >= 7 ? "atencion" : "normal",
+      nivel_alerta:
+        t.dias >= 90
+          ? "critico"
+          : t.dias >= 30
+            ? "alerta"
+            : t.dias >= 7
+              ? "atencion"
+              : "normal",
     }));
 
     res.json({ comparacion, resumen, por_estado, tickets_antiguos });
@@ -822,7 +941,8 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
 app.get("/api/setup", requireAdmin, async (req, res) => {
   try {
     const supabase = getSupabase();
-    if (!supabase) return res.json({ ok: false, message: "Supabase no configurado" });
+    if (!supabase)
+      return res.json({ ok: false, message: "Supabase no configurado" });
 
     // Intentar varios métodos para forzar la creación/refrescación
     const results = [];
@@ -830,15 +950,29 @@ app.get("/api/setup", requireAdmin, async (req, res) => {
     // Método 1: Notificar a Supabase que refresque schema cache
     try {
       const { error: rpcError } = await supabase.rpc("refresh_schema_cache");
-      results.push({ metodo: "refresh_schema_cache", ok: !rpcError, error: rpcError?.message });
+      results.push({
+        metodo: "refresh_schema_cache",
+        ok: !rpcError,
+        error: rpcError?.message,
+      });
     } catch (e) {
-      results.push({ metodo: "refresh_schema_cache", ok: false, error: e.message });
+      results.push({
+        metodo: "refresh_schema_cache",
+        ok: false,
+        error: e.message,
+      });
     }
 
     // Método 2: Verificar si la tabla existe
     try {
-      const { error: selError } = await supabase.from("tickets_elecmetal").select("id", { count: "exact", head: true });
-      results.push({ metodo: "check_table", ok: !selError, error: selError?.message || selError?.code });
+      const { error: selError } = await supabase
+        .from("tickets_elecmetal")
+        .select("id", { count: "exact", head: true });
+      results.push({
+        metodo: "check_table",
+        ok: !selError,
+        error: selError?.message || selError?.code,
+      });
       if (!selError) {
         return res.json({ ok: true, message: "Tabla existe OK", results });
       }
