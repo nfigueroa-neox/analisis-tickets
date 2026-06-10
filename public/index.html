@@ -2036,8 +2036,13 @@
                             {
                                 id: "centerText",
                                 beforeDraw(chart) {
-                                    const { width, height, ctx } = chart;
+                                    const { ctx, chartArea } = chart;
+                                    if (!chartArea) return;
                                     ctx.save();
+                                    const cx =
+                                        (chartArea.left + chartArea.right) / 2;
+                                    const cy =
+                                        (chartArea.top + chartArea.bottom) / 2;
                                     const total =
                                         chart.data.datasets[0].data.reduce(
                                             (a, b) => a + b,
@@ -2047,18 +2052,10 @@
                                     ctx.fillStyle = "#1a1a2e";
                                     ctx.textAlign = "center";
                                     ctx.textBaseline = "middle";
-                                    ctx.fillText(
-                                        Math.round(total),
-                                        width / 2,
-                                        height / 2 - 6,
-                                    );
+                                    ctx.fillText(Math.round(total), cx, cy - 6);
                                     ctx.font = "10px sans-serif";
                                     ctx.fillStyle = "#888";
-                                    ctx.fillText(
-                                        "Tickets",
-                                        width / 2,
-                                        height / 2 + 12,
-                                    );
+                                    ctx.fillText("Tickets", cx, cy + 12);
                                     ctx.restore();
                                 },
                             },
