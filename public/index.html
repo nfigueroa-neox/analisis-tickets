@@ -1493,8 +1493,13 @@
                         {
                             id: "centerText",
                             beforeDraw(chart) {
-                                const { width, height, ctx } = chart;
+                                const { ctx, chartArea } = chart;
+                                if (!chartArea) return;
                                 ctx.save();
+                                const cx =
+                                    (chartArea.left + chartArea.right) / 2;
+                                const cy =
+                                    (chartArea.top + chartArea.bottom) / 2;
                                 const total =
                                     chart.data.datasets[0].data.reduce(
                                         (a, b) => a + b,
@@ -1506,15 +1511,15 @@
                                 ctx.textBaseline = "middle";
                                 ctx.fillText(
                                     Math.round(total) + " HH",
-                                    width / 2,
-                                    height / 2 - 6,
+                                    cx,
+                                    cy - 6,
                                 );
                                 ctx.font = "10px sans-serif";
                                 ctx.fillStyle = "#888";
                                 ctx.fillText(
                                     selectedCompany || "Total",
-                                    width / 2,
-                                    height / 2 + 12,
+                                    cx,
+                                    cy + 12,
                                 );
                                 ctx.restore();
                             },
@@ -1721,7 +1726,12 @@
                         {
                             id: "priorityCenter",
                             beforeDraw(chart) {
-                                const { width, height, ctx } = chart;
+                                const { ctx, chartArea } = chart;
+                                if (!chartArea) return;
+                                const cx =
+                                    (chartArea.left + chartArea.right) / 2;
+                                const cy =
+                                    (chartArea.top + chartArea.bottom) / 2;
                                 const total = data.hoursByPriority.reduce(
                                     (s, d) => s + d.hours,
                                     0,
@@ -1733,16 +1743,12 @@
                                 ctx.textBaseline = "middle";
                                 ctx.fillText(
                                     Math.round(total) + " HH",
-                                    width / 2,
-                                    height / 2 - 6,
+                                    cx,
+                                    cy - 6,
                                 );
                                 ctx.font = "10px sans-serif";
                                 ctx.fillStyle = "#888";
-                                ctx.fillText(
-                                    "Total",
-                                    width / 2,
-                                    height / 2 + 12,
-                                );
+                                ctx.fillText("Total", cx, cy + 12);
                                 ctx.restore();
                             },
                         },
