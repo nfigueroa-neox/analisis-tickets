@@ -1096,6 +1096,7 @@
             let chartPriority = null;
             let lastData = null;
             let selectedCompany = null;
+            let selectedPriority = null;
             const COMPANY_PALETTE = [
                 "#4e79a7",
                 "#f28e2b",
@@ -1536,6 +1537,11 @@
                         (t) => t.company === selectedCompany,
                     );
                 }
+                if (selectedPriority) {
+                    tickets = tickets.filter(
+                        (t) => t.priorityLevel === selectedPriority,
+                    );
+                }
                 const tbody = document.getElementById("ticketsTableBody");
                 tbody.innerHTML = tickets
                     .map(
@@ -1697,6 +1703,18 @@
                         responsive: true,
                         maintainAspectRatio: true,
                         cutout: "55%",
+                        onClick: (event, activeElements) => {
+                            if (activeElements.length > 0) {
+                                const idx = activeElements[0].index;
+                                const level = data.hoursByPriority[idx].level;
+                                selectedPriority =
+                                    selectedPriority === level ? null : level;
+                            } else {
+                                selectedPriority = null;
+                            }
+                            renderPriorityChart(data);
+                            renderTicketsTable(lastData);
+                        },
                         plugins: {
                             legend: {
                                 position: "right",
@@ -1748,7 +1766,11 @@
                                 );
                                 ctx.font = "10px sans-serif";
                                 ctx.fillStyle = "#888";
-                                ctx.fillText("Total", cx, cy + 12);
+                                ctx.fillText(
+                                    selectedPriority || "Total",
+                                    cx,
+                                    cy + 12,
+                                );
                                 ctx.restore();
                             },
                         },
@@ -2035,6 +2057,23 @@
                         options: {
                             responsive: true,
                             cutout: "60%",
+                            onClick: (event, activeElements) => {
+                                if (activeElements.length > 0) {
+                                    const labels = [
+                                        "dentro",
+                                        "excedido",
+                                        "en_validacion",
+                                        "sin_datos",
+                                    ];
+                                    const cat = labels[activeElements[0].index];
+                                    const sel =
+                                        document.getElementById(
+                                            "filtroResultado",
+                                        );
+                                    sel.value = cat;
+                                    filtrarTablaComparacion();
+                                }
+                            },
                             plugins: { legend: { position: "right" } },
                         },
                         plugins: [
