@@ -2058,6 +2058,8 @@
                             responsive: true,
                             cutout: "60%",
                             onClick: (event, activeElements) => {
+                                const sel =
+                                    document.getElementById("filtroResultado");
                                 if (activeElements.length > 0) {
                                     const labels = [
                                         "dentro",
@@ -2065,14 +2067,11 @@
                                         "en_validacion",
                                         "sin_datos",
                                     ];
-                                    const cat = labels[activeElements[0].index];
-                                    const sel =
-                                        document.getElementById(
-                                            "filtroResultado",
-                                        );
-                                    sel.value = cat;
-                                    filtrarTablaComparacion();
+                                    sel.value = labels[activeElements[0].index];
+                                } else {
+                                    sel.value = "todas";
                                 }
+                                filtrarTablaComparacion();
                             },
                             plugins: { legend: { position: "right" } },
                         },
