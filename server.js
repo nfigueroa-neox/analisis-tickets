@@ -831,10 +831,17 @@ app.get("/api/excel/analisis", requireAdmin, async (req, res) => {
         if (ref) mongoHours[ref[0]] = Math.round(r.totalHH * 100) / 100;
       });
 
-      // 2b. Días en validación desde el Excel (columna "Días")
+      // 2b. Días en validación: calcular desde cambio_estado hasta hoy
+      const today = new Date();
       tickets.forEach((t) => {
-        if (t.estado && /validaci/i.test(t.estado) && t.dias) {
-          validationDays[t.ticket_ref] = t.dias;
+        if (t.estado && /validaci/i.test(t.estado)) {
+          if (t.cambio_estado) {
+            const desde = new Date(t.cambio_estado);
+            const diff = Math.floor((today - desde) / (1000 * 60 * 60 * 24));
+            validationDays[t.ticket_ref] = diff >= 0 ? diff : 0;
+          } else if (t.dias) {
+            validationDays[t.ticket_ref] = t.dias;
+          }
         }
       });
 
