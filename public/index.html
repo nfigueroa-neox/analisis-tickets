@@ -624,6 +624,17 @@
 
                     <div class="filters">
                         <div class="filter-group">
+                            <label>Rol</label>
+                            <select
+                                id="rolFilter"
+                                onchange="filtrarUsuariosPorRol()"
+                            >
+                                <option value="">Todos</option>
+                                <option value="RESOLUTOR">RESOLUTOR</option>
+                                <option value="ADMIN">ADMIN</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
                             <label>Usuario</label>
                             <select id="userSelect">
                                 <option value="">Cargando usuarios...</option>
@@ -1263,6 +1274,7 @@
                     const users = await usersRes.json();
                     const companies = await companiesRes.json();
 
+                    window._todosLosUsuarios = users;
                     const userSelect = document.getElementById("userSelect");
                     userSelect.innerHTML =
                         '<option value="">Seleccione un usuario</option>';
@@ -1272,6 +1284,7 @@
                         opt.textContent = u.name;
                         opt.dataset.email = u.email;
                         opt.dataset.company = u.company;
+                        opt.dataset.roles = (u.roles || []).join(",");
                         userSelect.appendChild(opt);
                     });
                     // Mostrar detalle del usuario seleccionado
@@ -1312,6 +1325,34 @@
                 } catch (err) {
                     console.error(err);
                 }
+            }
+
+            // ─── Filtro por rol ───────────────────────────────────────────────────
+            function filtrarUsuariosPorRol() {
+                const rol = document.getElementById("rolFilter").value;
+                const userSelect = document.getElementById("userSelect");
+                const users = window._todosLosUsuarios || [];
+
+                userSelect.innerHTML =
+                    '<option value="">Seleccione un usuario</option>';
+
+                users
+                    .filter((u) => {
+                        if (!rol) return true;
+                        return (u.roles || []).includes(rol);
+                    })
+                    .forEach((u) => {
+                        const opt = document.createElement("option");
+                        opt.value = u.email;
+                        opt.textContent = u.name;
+                        opt.dataset.email = u.email;
+                        opt.dataset.company = u.company;
+                        opt.dataset.roles = (u.roles || []).join(",");
+                        userSelect.appendChild(opt);
+                    });
+
+                // Limpiar detalle del usuario al cambiar el filtro
+                document.getElementById("userSelectDetail").textContent = "";
             }
 
             // ─── Búsqueda principal ──────────────────────────────────────────────
