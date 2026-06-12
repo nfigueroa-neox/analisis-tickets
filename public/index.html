@@ -2204,10 +2204,19 @@
                     },
                 );
 
-                // Tabla comparación (con click en fila)
-                window._excelData = data.comparacion;
+                // Tabla comparación (con click en fila) — ordenado por ticket_ref descendente
+                const sorted = [...data.comparacion].sort((a, b) => {
+                    const na =
+                        parseInt((a.ticket_ref || "").replace(/\D/g, ""), 10) ||
+                        0;
+                    const nb =
+                        parseInt((b.ticket_ref || "").replace(/\D/g, ""), 10) ||
+                        0;
+                    return nb - na;
+                });
+                window._excelData = sorted;
                 document.getElementById("comparacionTableBody").innerHTML =
-                    data.comparacion
+                    sorted
                         .map((t, i) => {
                             const colorMap = {
                                 dentro: "#2ecc71",
