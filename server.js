@@ -1053,21 +1053,16 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
     const startDate = start ? new Date(start) : new Date("2020-01-01");
     const endDate = end ? new Date(end + "T23:59:59.999Z") : new Date();
 
-    // Obtener tickets donde el usuario comentó y que hayan sido resueltos
+    // Obtener tickets donde el usuario comentó (sin filtro de fecha en MongoDB)
     const tickets = await (
       await getDB()
     )
       .collection("incidents")
       .find({
-        $and: [
-          {
-            "commentaries.createdBy": {
-              $regex: userEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-              $options: "i",
-            },
-          },
-          { date: { $gte: startDate, $lte: endDate } },
-        ],
+        "commentaries.createdBy": {
+          $regex: userEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+          $options: "i",
+        },
       })
       .project({
         ticketNumber: 1,
@@ -1088,17 +1083,51 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
 
     const resolvedTickets = [];
 
+    console.log("Performance - tickets encontrados:", tickets.length);
+
     for (const ticket of tickets) {
-      // Buscar el cambio a "resuelto"
-      const resolvedChange = (ticket.statusChanges || []).find(
+      // Buscar el cambio a "resuelto" en statusChanges
+      const statusChanges = ticket.statusChanges || [];
+      const resolvedChange = statusChanges.find(
         (sc) =>
           (sc.to || "").toLowerCase() === "resuelto" ||
-          (sc.to || "").toLowerCase() === "resuelta",
+          (sc.to || "").toLowerCase() === "resuelta" ||
+          (sc.to || "").toLowerCase() === "cerrado",
       );
-      if (!resolvedChange) continue;
+
+      // Si no hay statusChange a resuelto, verificar status actual
+      let resolvedDate = null;
+      if (resolvedChange) {
+        resolvedDate = new Date(resolvedChange.date);
+      } else if ((ticket.status || "").toLowerCase() === "resuelto") {
+        // Usar la fecha del último statusChange o el último comentario como aprox.
+        if (statusChanges.length > 0) {
+          resolvedDate = new Date(statusChanges[statusChanges.length - 1].date);
+        } else if (ticket.commentaries && ticket.commentaries.length > 0) {
+          const lastComment =
+            ticket.commentaries[ticket.commentaries.length - 1];
+          if (lastComment.date) resolvedDate = new Date(lastComment.date);
+        }
+      }
+
+      if (!resolvedDate) continue;
+
+      // Mostrar debug para entender datos
+      if (resolvedTickets.length < 3) {
+        console.log("Performance ticket:", {
+          tn: ticket.ticketNumber,
+          status: ticket.status,
+          scCount: statusChanges.length,
+          resolvedFrom: resolvedChange ? "statusChange" : "fallback",
+          resolvedDate: resolvedDate.toISOString(),
+          createdDate: ticket.date,
+        });
+      }
+
+      // Filtrar por fecha de resolución
+      if (resolvedDate < startDate || resolvedDate > endDate) continue;
 
       const createdDate = new Date(ticket.date);
-      const resolvedDate = new Date(resolvedChange.date);
       const resolutionHours = (resolvedDate - createdDate) / (1000 * 60 * 60);
 
       if (resolutionHours < 0) continue;
