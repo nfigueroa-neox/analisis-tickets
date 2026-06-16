@@ -1043,7 +1043,7 @@ CREATE INDEX IF NOT EXISTS idx_tickets_elecmetal_ref ON tickets_elecmetal(ticket
 // ─── 5. Rendimiento: tiempos de resolución ──────────────────────────────────
 app.get("/api/performance", requireAdmin, async (req, res) => {
   try {
-    const { user, start, end } = req.query;
+    const { user, start, end, groupBy } = req.query;
     if (!user)
       return res
         .status(400)
@@ -1053,7 +1053,6 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
     const startDate = start ? new Date(start) : new Date("2020-01-01");
     const endDate = end ? new Date(end + "T23:59:59.999Z") : new Date();
 
-    // Obtener tickets donde el usuario comentó (sin filtro de fecha en MongoDB)
     const tickets = await (
       await getDB()
     )
@@ -1067,7 +1066,6 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
       .project({
         ticketNumber: 1,
         title: 1,
-        company: 1,
         status: 1,
         date: 1,
         statusChanges: 1,
@@ -1076,62 +1074,39 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
       })
       .toArray();
 
-    // Cargar SLA para prioridad
     const slas = await db.collection("slas").find({}).toArray();
     const slaById = {};
     slas.forEach((s) => (slaById[s._id.toString()] = s.type));
 
     const resolvedTickets = [];
 
-    console.log("Performance - tickets encontrados:", tickets.length);
-
     for (const ticket of tickets) {
-      // Solo interesan tickets con estado actual "resuelto"
       if ((ticket.status || "").toLowerCase() !== "resuelto") continue;
 
-      // Fecha de resolución: usar el último statusChange, o el último comentario
-      const statusChanges = ticket.statusChanges || [];
-      const resolvedChange = statusChanges.find(
-        (sc) =>
-          (sc.to || "").toLowerCase() === "resuelto" ||
-          (sc.to || "").toLowerCase() === "resuelta" ||
-          (sc.to || "").toLowerCase() === "cerrado",
+      const sc = ticket.statusChanges || [];
+      const rc = sc.find(
+        (s) =>
+          (s.to || "").toLowerCase() === "resuelto" ||
+          (s.to || "").toLowerCase() === "resuelta" ||
+          (s.to || "").toLowerCase() === "cerrado",
       );
 
       let resolvedDate = null;
-      if (resolvedChange) {
-        resolvedDate = new Date(resolvedChange.date);
-      } else if (statusChanges.length > 0) {
-        // Último statusChange como aproximación
-        resolvedDate = new Date(statusChanges[statusChanges.length - 1].date);
-      } else if (ticket.commentaries && ticket.commentaries.length > 0) {
-        const lastComment = ticket.commentaries[ticket.commentaries.length - 1];
-        if (lastComment.date) resolvedDate = new Date(lastComment.date);
+      if (rc) resolvedDate = new Date(rc.date);
+      else if (sc.length > 0) resolvedDate = new Date(sc[sc.length - 1].date);
+      else if (ticket.commentaries && ticket.commentaries.length > 0) {
+        const lc = ticket.commentaries[ticket.commentaries.length - 1];
+        if (lc.date) resolvedDate = new Date(lc.date);
       }
 
-      if (!resolvedDate) continue;
-
-      // Mostrar debug para entender datos
-      if (resolvedTickets.length < 3) {
-        console.log("Performance ticket:", {
-          tn: ticket.ticketNumber,
-          status: ticket.status,
-          scCount: statusChanges.length,
-          hasResolvedChange: !!resolvedChange,
-          resolvedDate: resolvedDate.toISOString(),
-          createdDate: ticket.date,
-        });
-      }
-
-      // Filtrar por fecha de resolución
-      if (resolvedDate < startDate || resolvedDate > endDate) continue;
+      if (!resolvedDate || resolvedDate < startDate || resolvedDate > endDate)
+        continue;
 
       const createdDate = new Date(ticket.date);
-      const resolutionHours = (resolvedDate - createdDate) / (1000 * 60 * 60);
+      const hours = (resolvedDate - createdDate) / (1000 * 60 * 60);
+      if (hours < 0) continue;
 
-      if (resolutionHours < 0) continue;
-
-      // Obtener prioridad y normalizar al nivel (Alta/Media/Baja)
+      // Prioridad
       const PRIO_LABELS = {
         Crítica: "Alta",
         Mayor: "Alta",
@@ -1139,89 +1114,97 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
         Menor: "Baja",
         "Sin prioridad": "Sin prioridad",
       };
-      let priorityKey = null;
+      let pk = null;
       if (ticket.sla) {
-        const type = slaById[ticket.sla.toString()];
-        if (type)
-          priorityKey =
-            type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+        const t = slaById[ticket.sla.toString()];
+        if (t) pk = t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
       }
-      if (!priorityKey) {
-        const fromExcel = getPriorityFromTicket(ticket.title);
-        if (fromExcel)
-          priorityKey =
-            fromExcel.charAt(0).toUpperCase() +
-            fromExcel.slice(1).toLowerCase();
+      if (!pk) {
+        const fe = getPriorityFromTicket(ticket.title);
+        if (fe) pk = fe.charAt(0).toUpperCase() + fe.slice(1).toLowerCase();
       }
-      const priority = PRIO_LABELS[priorityKey] || "Sin prioridad";
 
       resolvedTickets.push({
         ticketNumber: ticket.ticketNumber,
-        title: (ticket.title || "").substring(0, 100),
-        company: ticket.company,
-        status: ticket.status,
-        priority,
-        createdDate: createdDate.toISOString(),
-        resolvedDate: resolvedDate.toISOString(),
-        resolutionHours: Math.round(resolutionHours * 100) / 100,
+        priority: PRIO_LABELS[pk] || "Sin prioridad",
+        resolvedDate,
+        resolutionHours: Math.round(hours * 100) / 100,
       });
     }
 
-    // Agrupar por prioridad
-    const byPriority = {};
+    // Agrupar por bucket de tiempo según groupBy
+    const bucketKey = {
+      week: (d) => {
+        const y = d.getFullYear();
+        const startOfYear = new Date(y, 0, 1);
+        const weekNum = Math.ceil(
+          ((d - startOfYear) / 86400000 + startOfYear.getDay() + 1) / 7,
+        );
+        return `${y}-S${String(weekNum).padStart(2, "0")}`;
+      },
+      month: (d) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+      year: (d) => `${d.getFullYear()}`,
+    };
+
+    const labelKey = {
+      week: (k) => `Sem ${k.split("-")[1]}`,
+      month: (k) => {
+        const [y, m] = k.split("-");
+        const meses = [
+          "Ene",
+          "Feb",
+          "Mar",
+          "Abr",
+          "May",
+          "Jun",
+          "Jul",
+          "Ago",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dic",
+        ];
+        return `${meses[parseInt(m) - 1]} ${y}`;
+      },
+      year: (k) => k,
+    };
+
+    const getKey = bucketKey[groupBy] || bucketKey.month;
+    const getLabel = labelKey[groupBy] || labelKey.month;
+
+    const buckets = {};
     resolvedTickets.forEach((t) => {
-      if (!byPriority[t.priority]) {
-        byPriority[t.priority] = {
-          priority: t.priority,
-          count: 0,
-          totalHours: 0,
-          hours: [],
-        };
-      }
-      byPriority[t.priority].count++;
-      byPriority[t.priority].totalHours += t.resolutionHours;
-      byPriority[t.priority].hours.push(t.resolutionHours);
+      const key = getKey(t.resolvedDate);
+      if (!buckets[key])
+        buckets[key] = { label: getLabel(key), count: 0, totalHours: 0 };
+      buckets[key].count++;
+      buckets[key].totalHours += t.resolutionHours;
     });
 
-    const priorityOrder = [
-      "Crítica",
-      "Mayor",
-      "Media",
-      "Menor",
-      "Sin prioridad",
-    ];
-    const hoursByPriority = priorityOrder
-      .filter((p) => byPriority[p])
-      .map((p) => ({
-        priority: p,
-        count: byPriority[p].count,
+    const bucketsArr = Object.entries(buckets)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, v]) => ({
+        period: key,
+        label: v.label,
+        count: v.count,
         avgHours:
-          byPriority[p].count > 0
-            ? Math.round(
-                (byPriority[p].totalHours / byPriority[p].count) * 100,
-              ) / 100
-            : 0,
-        totalHours: Math.round(byPriority[p].totalHours * 100) / 100,
+          v.count > 0 ? Math.round((v.totalHours / v.count) * 100) / 100 : 0,
+        totalHours: Math.round(v.totalHours * 100) / 100,
       }));
 
-    const totalCount = resolvedTickets.length;
-    const totalHours = resolvedTickets.reduce(
-      (s, t) => s + t.resolutionHours,
-      0,
-    );
-
     res.json({
-      tickets: resolvedTickets.sort(
-        (a, b) => b.resolutionHours - a.resolutionHours,
-      ),
-      hoursByPriority,
+      buckets: bucketsArr,
       summary: {
-        totalTickets: totalCount,
+        totalTickets: resolvedTickets.length,
         avgHours:
-          totalCount > 0
-            ? Math.round((totalHours / totalCount) * 100) / 100
+          resolvedTickets.length > 0
+            ? Math.round(
+                (resolvedTickets.reduce((s, t) => s + t.resolutionHours, 0) /
+                  resolvedTickets.length) *
+                  100,
+              ) / 100
             : 0,
-        totalHours: Math.round(totalHours * 100) / 100,
       },
     });
   } catch (err) {

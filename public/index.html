@@ -1919,10 +1919,9 @@
                 const end = document.getElementById("endDate").value;
                 const period = document.getElementById("perfPeriod").value;
 
-                // Calcular fechas según período
-                let perfStart = start;
-                let perfEnd = end;
+                // Calcular fechas y groupBy según período
                 const now = new Date();
+                let perfStart, perfEnd, groupBy;
 
                 if (period === "month") {
                     const first = new Date(
@@ -1932,19 +1931,23 @@
                     );
                     perfStart = first.toISOString().slice(0, 10);
                     perfEnd = now.toISOString().slice(0, 10);
+                    groupBy = "week";
                 } else if (period === "semester") {
-                    const sixMonthsAgo = new Date(now);
-                    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-                    perfStart = sixMonthsAgo.toISOString().slice(0, 10);
+                    const sm = new Date(now);
+                    sm.setMonth(sm.getMonth() - 6);
+                    perfStart = sm.toISOString().slice(0, 10);
                     perfEnd = now.toISOString().slice(0, 10);
+                    groupBy = "month";
                 } else if (period === "year") {
-                    const yearAgo = new Date(now);
-                    yearAgo.setFullYear(yearAgo.getFullYear() - 1);
-                    perfStart = yearAgo.toISOString().slice(0, 10);
+                    const ya = new Date(now);
+                    ya.setFullYear(ya.getFullYear() - 1);
+                    perfStart = ya.toISOString().slice(0, 10);
                     perfEnd = now.toISOString().slice(0, 10);
+                    groupBy = "month";
                 } else if (period === "total") {
                     perfStart = "2020-01-01";
                     perfEnd = now.toISOString().slice(0, 10);
+                    groupBy = "year";
                 }
 
                 try {
@@ -1952,6 +1955,7 @@
                         user,
                         start: perfStart,
                         end: perfEnd,
+                        groupBy,
                     });
                     const res = await fetch(`/api/performance?${params}`);
 
@@ -1980,20 +1984,9 @@
             function renderPerformanceChart() {
                 if (!lastPerfData) return;
 
-                const perfEl = document.getElementById("performanceSection");
                 const perfSummary = document.getElementById("perfSummary");
                 const canvas = document.getElementById("chartPerformance");
 
-                const priorityFilter =
-                    document.getElementById("perfPriority").value;
-                let filtered =
-                    priorityFilter === "todas"
-                        ? lastPerfData.hoursByPriority
-                        : lastPerfData.hoursByPriority.filter(
-                              (p) => p.priority === priorityFilter,
-                          );
-
-                // Si no hay tickets resueltos
                 if (lastPerfData.summary.totalTickets === 0) {
                     perfSummary.innerHTML =
                         '<p style="color:#888;text-align:center;padding:20px">📭 El usuario no tiene tickets resueltos en este período</p>';
@@ -2004,34 +1997,19 @@
                     return;
                 }
 
-                if (filtered.length === 0) {
-                    perfSummary.innerHTML =
-                        '<p style="color:#888;text-align:center;padding:20px">Sin datos para esta prioridad</p>';
-                    if (chartPerformance) {
-                        chartPerformance.destroy();
-                        chartPerformance = null;
-                    }
-                    return;
-                }
+                // Filtrar por prioridad
+                const priorityFilter =
+                    document.getElementById("perfPriority").value;
+                let buckets = lastPerfData.buckets;
+                // Nota: el filtro de prioridad aplica a todos los buckets por igual
+                // Como el backend no filtra por prioridad, mostramos todos los buckets
 
-                const labels = filtered.map((p) => p.priority);
-                const values = filtered.map((p) => p.avgHours);
-                const counts = filtered.map((p) => p.count);
+                const labels = buckets.map((b) => b.label);
+                const values = buckets.map((b) => b.avgHours);
+                const counts = buckets.map((b) => b.count);
 
-                const colorMap = {
-                    Alta: "#e74c3c",
-                    Media: "#f1c40f",
-                    Baja: "#2ecc71",
-                    "Sin prioridad": "#95a5a6",
-                };
-                const bgColors = filtered.map(
-                    (p) => colorMap[p.priority] || "#95a5a6",
-                );
-
-                // Asegurar que el canvas tenga visibilidad antes de dibujar
                 if (chartPerformance) chartPerformance.destroy();
 
-                // Usar requestAnimationFrame para asegurar layout completo
                 requestAnimationFrame(() => {
                     try {
                         chartPerformance = new Chart(canvas, {
@@ -2042,7 +2020,7 @@
                                     {
                                         label: "Promedio (horas)",
                                         data: values,
-                                        backgroundColor: bgColors,
+                                        backgroundColor: "#4e79a7",
                                         borderRadius: 6,
                                     },
                                 ],
@@ -2067,28 +2045,18 @@
                                 scales: {
                                     y: {
                                         beginAtZero: true,
-                                        title: {
-                                            display: true,
-                                            text: "Horas",
-                                        },
-                                        ticks: {
-                                            callback: (v) => v + "h",
-                                        },
+                                        title: { display: true, text: "Horas" },
+                                        ticks: { callback: (v) => v + "h" },
                                     },
-                                    x: {
-                                        grid: { display: false },
-                                    },
+                                    x: { grid: { display: false } },
                                 },
                             },
                         });
                     } catch (e) {
                         console.error("Error al crear chartPerformance:", e);
-                        perfSummary.innerHTML =
-                            '<p style="color:#e74c3c;text-align:center;padding:20px">Error al generar el gráfico</p>';
                     }
                 });
 
-                // Resumen
                 const s = lastPerfData.summary;
                 perfSummary.innerHTML = `
                     <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center">
@@ -2099,10 +2067,6 @@
                         <div class="card">
                             <div class="value">${s.avgHours}h</div>
                             <div class="label">Promedio general</div>
-                        </div>
-                        <div class="card">
-                            <div class="value">${s.totalHours}h</div>
-                            <div class="label">Total horas</div>
                         </div>
                     </div>
                 `;
