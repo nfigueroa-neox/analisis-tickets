@@ -842,12 +842,9 @@
                                             onchange="renderPerformanceChart()"
                                         >
                                             <option value="todas">Todas</option>
-                                            <option value="Crítica">
-                                                Crítica
-                                            </option>
-                                            <option value="Mayor">Mayor</option>
+                                            <option value="Alta">Alta</option>
                                             <option value="Media">Media</option>
-                                            <option value="Menor">Menor</option>
+                                            <option value="Baja">Baja</option>
                                         </select>
                                         <span
                                             onclick="
@@ -2022,10 +2019,9 @@
                 const counts = filtered.map((p) => p.count);
 
                 const colorMap = {
-                    Crítica: "#e74c3c",
-                    Mayor: "#e67e22",
+                    Alta: "#e74c3c",
                     Media: "#f1c40f",
-                    Menor: "#2ecc71",
+                    Baja: "#2ecc71",
                     "Sin prioridad": "#95a5a6",
                 };
                 const bgColors = filtered.map(

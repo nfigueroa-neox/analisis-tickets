@@ -1131,21 +1131,29 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
 
       if (resolutionHours < 0) continue;
 
-      // Obtener prioridad
-      let priority = null;
+      // Obtener prioridad y normalizar al nivel (Alta/Media/Baja)
+      const PRIO_LABELS = {
+        Crítica: "Alta",
+        Mayor: "Alta",
+        Media: "Media",
+        Menor: "Baja",
+        "Sin prioridad": "Sin prioridad",
+      };
+      let priorityKey = null;
       if (ticket.sla) {
         const type = slaById[ticket.sla.toString()];
         if (type)
-          priority = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+          priorityKey =
+            type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
       }
-      if (!priority) {
+      if (!priorityKey) {
         const fromExcel = getPriorityFromTicket(ticket.title);
         if (fromExcel)
-          priority =
+          priorityKey =
             fromExcel.charAt(0).toUpperCase() +
             fromExcel.slice(1).toLowerCase();
       }
-      priority = priority || "Sin prioridad";
+      const priority = PRIO_LABELS[priorityKey] || "Sin prioridad";
 
       resolvedTickets.push({
         ticketNumber: ticket.ticketNumber,
