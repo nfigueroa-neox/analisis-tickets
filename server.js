@@ -1124,6 +1124,18 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
 
       // Horas desde primer comentario del usuario hasta resolución
       const hours = (resolvedDate - firstUserComment) / (1000 * 60 * 60);
+      if (resolvedTickets.length < 5) {
+        console.log(
+          "Ticket:",
+          ticket.ticketNumber,
+          "firstComment:",
+          firstUserComment.toISOString(),
+          "resolved:",
+          resolvedDate.toISOString(),
+          "horas:",
+          Math.round(hours * 100) / 100,
+        );
+      }
       if (hours <= 0 || hours > 720) continue;
 
       // Prioridad
