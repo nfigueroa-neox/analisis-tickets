@@ -784,6 +784,93 @@
                                 </h3>
                                 <canvas id="chartPriority"></canvas>
                             </div>
+
+                            <!-- ═══ Rendimiento en resolución ═══ -->
+                            <div
+                                class="chart-box"
+                                id="performanceSection"
+                                style="display: none"
+                            >
+                                <h3
+                                    style="
+                                        display: flex;
+                                        justify-content: space-between;
+                                        align-items: center;
+                                    "
+                                >
+                                    🏆 Rendimiento en resolución
+                                    <span
+                                        style="
+                                            display: flex;
+                                            gap: 8px;
+                                            align-items: center;
+                                        "
+                                    >
+                                        <select
+                                            id="perfPeriod"
+                                            style="
+                                                font-size: 12px;
+                                                padding: 4px 8px;
+                                                border: 1px solid #d0d5dd;
+                                                border-radius: 6px;
+                                                background: white;
+                                                font-weight: 400;
+                                            "
+                                            onchange="loadPerformance()"
+                                        >
+                                            <option value="month">
+                                                Este Mes
+                                            </option>
+                                            <option value="semester">
+                                                Último Semestre
+                                            </option>
+                                            <option value="year">
+                                                Último Año
+                                            </option>
+                                            <option value="total">Total</option>
+                                        </select>
+                                        <select
+                                            id="perfPriority"
+                                            style="
+                                                font-size: 12px;
+                                                padding: 4px 8px;
+                                                border: 1px solid #d0d5dd;
+                                                border-radius: 6px;
+                                                background: white;
+                                                font-weight: 400;
+                                            "
+                                            onchange="renderPerformanceChart()"
+                                        >
+                                            <option value="todas">Todas</option>
+                                            <option value="Crítica">
+                                                Crítica
+                                            </option>
+                                            <option value="Mayor">Mayor</option>
+                                            <option value="Media">Media</option>
+                                            <option value="Menor">Menor</option>
+                                        </select>
+                                        <span
+                                            onclick="
+                                                downloadChart(
+                                                    'chartPerformance',
+                                                    'rendimiento_resolucion',
+                                                )
+                                            "
+                                            style="
+                                                cursor: pointer;
+                                                font-size: 16px;
+                                            "
+                                            title="Descargar PNG"
+                                            >📥</span
+                                        >
+                                    </span>
+                                </h3>
+                                <canvas id="chartPerformance"></canvas>
+                                <div
+                                    id="perfSummary"
+                                    style="margin-top: 12px"
+                                ></div>
+                            </div>
                         </div>
 
                         <div class="table-section">
@@ -816,85 +903,6 @@
                                 </thead>
                                 <tbody id="companyTableBody"></tbody>
                             </table>
-                        </div>
-
-                        <!-- ═══ Rendimiento en resolución ═══ -->
-                        <div
-                            class="table-section"
-                            id="performanceSection"
-                            style="display: none"
-                        >
-                            <h3>🏆 Rendimiento en resolución</h3>
-                            <div
-                                class="filters"
-                                style="margin-bottom: 16px; padding: 12px 16px"
-                            >
-                                <div class="filter-group">
-                                    <label>Período</label>
-                                    <select
-                                        id="perfPeriod"
-                                        style="min-width: 140px"
-                                        onchange="loadPerformance()"
-                                    >
-                                        <option value="month">Este Mes</option>
-                                        <option value="semester">
-                                            Último Semestre
-                                        </option>
-                                        <option value="year">Último Año</option>
-                                        <option value="total">Total</option>
-                                    </select>
-                                </div>
-                                <div class="filter-group">
-                                    <label>Prioridad</label>
-                                    <select
-                                        id="perfPriority"
-                                        style="min-width: 140px"
-                                        onchange="renderPerformanceChart()"
-                                    >
-                                        <option value="todas">Todas</option>
-                                        <option value="Crítica">Crítica</option>
-                                        <option value="Mayor">Mayor</option>
-                                        <option value="Media">Media</option>
-                                        <option value="Menor">Menor</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="charts-row">
-                                <div
-                                    class="chart-box"
-                                    style="grid-column: 1/-1"
-                                >
-                                    <h3
-                                        style="
-                                            display: flex;
-                                            justify-content: space-between;
-                                            align-items: center;
-                                        "
-                                    >
-                                        📈 Promedio de horas de resolución
-                                        <span
-                                            onclick="
-                                                downloadChart(
-                                                    'chartPerformance',
-                                                    'rendimiento_resolucion',
-                                                )
-                                            "
-                                            style="
-                                                cursor: pointer;
-                                                font-size: 16px;
-                                            "
-                                            title="Descargar PNG"
-                                            >📥</span
-                                        >
-                                    </h3>
-                                    <canvas id="chartPerformance"></canvas>
-                                </div>
-                            </div>
-                            <div
-                                class="summary"
-                                id="perfSummary"
-                                style="margin-top: 12px"
-                            ></div>
                         </div>
                     </div>
 
@@ -1973,6 +1981,10 @@
             function renderPerformanceChart() {
                 if (!lastPerfData) return;
 
+                const perfEl = document.getElementById("performanceSection");
+                const perfSummary = document.getElementById("perfSummary");
+                const canvas = document.getElementById("chartPerformance");
+
                 const priorityFilter =
                     document.getElementById("perfPriority").value;
                 let filtered =
@@ -1982,9 +1994,24 @@
                               (p) => p.priority === priorityFilter,
                           );
 
+                // Si no hay tickets resueltos
+                if (lastPerfData.summary.totalTickets === 0) {
+                    perfSummary.innerHTML =
+                        '<p style="color:#888;text-align:center;padding:20px">📭 El usuario no tiene tickets resueltos en este período</p>';
+                    if (chartPerformance) {
+                        chartPerformance.destroy();
+                        chartPerformance = null;
+                    }
+                    return;
+                }
+
                 if (filtered.length === 0) {
-                    document.getElementById("perfSummary").innerHTML =
+                    perfSummary.innerHTML =
                         '<p style="color:#888;text-align:center;padding:20px">Sin datos para esta prioridad</p>';
+                    if (chartPerformance) {
+                        chartPerformance.destroy();
+                        chartPerformance = null;
+                    }
                     return;
                 }
 
@@ -2003,61 +2030,70 @@
                     (p) => colorMap[p.priority] || "#95a5a6",
                 );
 
-                const ctx = document.getElementById("chartPerformance");
+                // Asegurar que el canvas tenga visibilidad antes de dibujar
                 if (chartPerformance) chartPerformance.destroy();
 
-                chartPerformance = new Chart(ctx, {
-                    type: "bar",
-                    data: {
-                        labels,
-                        datasets: [
-                            {
-                                label: "Promedio (horas)",
-                                data: values,
-                                backgroundColor: bgColors,
-                                borderRadius: 6,
+                // Usar requestAnimationFrame para asegurar layout completo
+                requestAnimationFrame(() => {
+                    try {
+                        chartPerformance = new Chart(canvas, {
+                            type: "bar",
+                            data: {
+                                labels,
+                                datasets: [
+                                    {
+                                        label: "Promedio (horas)",
+                                        data: values,
+                                        backgroundColor: bgColors,
+                                        borderRadius: 6,
+                                    },
+                                ],
                             },
-                        ],
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: true,
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                                callbacks: {
-                                    label: (ctx) => {
-                                        const i = ctx.dataIndex;
-                                        return [
-                                            `${values[i]}h promedio`,
-                                            `${counts[i]} ticket${counts[i] !== 1 ? "s" : ""} resuelto${counts[i] !== 1 ? "s" : ""}`,
-                                        ];
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: true,
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: (ctx) => {
+                                                const i = ctx.dataIndex;
+                                                return [
+                                                    `${values[i]}h promedio`,
+                                                    `${counts[i]} ticket${counts[i] !== 1 ? "s" : ""} resuelto${counts[i] !== 1 ? "s" : ""}`,
+                                                ];
+                                            },
+                                        },
+                                    },
+                                },
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        title: {
+                                            display: true,
+                                            text: "Horas",
+                                        },
+                                        ticks: {
+                                            callback: (v) => v + "h",
+                                        },
+                                    },
+                                    x: {
+                                        grid: { display: false },
                                     },
                                 },
                             },
-                        },
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                title: {
-                                    display: true,
-                                    text: "Horas",
-                                },
-                                ticks: {
-                                    callback: (v) => v + "h",
-                                },
-                            },
-                            x: {
-                                grid: { display: false },
-                            },
-                        },
-                    },
+                        });
+                    } catch (e) {
+                        console.error("Error al crear chartPerformance:", e);
+                        perfSummary.innerHTML =
+                            '<p style="color:#e74c3c;text-align:center;padding:20px">Error al generar el gráfico</p>';
+                    }
                 });
 
                 // Resumen
                 const s = lastPerfData.summary;
-                document.getElementById("perfSummary").innerHTML = `
-                    <div style="display:flex;gap:16px;flex-wrap:wrap">
+                perfSummary.innerHTML = `
+                    <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center">
                         <div class="card">
                             <div class="value">${s.totalTickets}</div>
                             <div class="label">Tickets resueltos</div>
