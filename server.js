@@ -1085,9 +1085,25 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
     const resolvedTickets = [];
 
     for (const ticket of tickets) {
-      const isResolved = (ticket.status || "").toLowerCase() === "resuelto";
-      if (!isResolved) continue;
+      // Solo tickets resueltos
+      if ((ticket.status || "").toLowerCase() !== "resuelto") continue;
 
+      // Primer comentario del usuario = inicio de su trabajo
+      const userComments = (ticket.commentaries || []).filter((c) => {
+        try {
+          const re = new RegExp(
+            userEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+            "i",
+          );
+          return re.test(c.createdBy || "");
+        } catch {
+          return false;
+        }
+      });
+      if (userComments.length === 0) continue;
+      const firstUserComment = new Date(userComments[0].date);
+
+      // Fecha de resolución
       const sc = ticket.statusChanges || [];
       const rc = sc.find(
         (s) =>
@@ -1099,17 +1115,16 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
       let resolvedDate = null;
       if (rc) resolvedDate = new Date(rc.date);
       else if (sc.length > 0) resolvedDate = new Date(sc[sc.length - 1].date);
-      else if (ticket.commentaries && ticket.commentaries.length > 0) {
-        const lc = ticket.commentaries[ticket.commentaries.length - 1];
-        if (lc.date) resolvedDate = new Date(lc.date);
+      else if (userComments.length > 0) {
+        resolvedDate = new Date(userComments[userComments.length - 1].date);
       }
 
       if (!resolvedDate || resolvedDate < startDate || resolvedDate > endDate)
         continue;
 
-      const createdDate = new Date(ticket.date);
-      const hours = (resolvedDate - createdDate) / (1000 * 60 * 60);
-      if (hours < 0) continue;
+      // Horas desde primer comentario del usuario hasta resolución
+      const hours = (resolvedDate - firstUserComment) / (1000 * 60 * 60);
+      if (hours <= 0 || hours > 720) continue;
 
       // Prioridad
       const PRIO_LABELS = {
