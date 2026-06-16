@@ -1977,15 +1977,34 @@
                     renderPerformanceChart();
                 } catch (err) {
                     console.error("Error loading performance:", err);
+                    document.getElementById("perfSummary").innerHTML =
+                        `<p style="color:#e74c3c;text-align:center;padding:20px">❌ Error al cargar: ${err.message}</p>`;
                 }
             }
 
             function renderPerformanceChart() {
-                if (!lastPerfData || !lastPerfData.buckets) return;
+                if (!lastPerfData) {
+                    document.getElementById("perfSummary").innerHTML =
+                        '<p style="color:#888;text-align:center;padding:20px">Sin datos</p>';
+                    return;
+                }
                 const canvas = document.getElementById("chartPerformance");
                 const summaryEl = document.getElementById("perfSummary");
-                const buckets = lastPerfData.buckets;
-                const s = lastPerfData.summary;
+                const buckets = lastPerfData.buckets || [];
+                const s = lastPerfData.summary || {
+                    totalTickets: 0,
+                    avgHours: 0,
+                };
+
+                if (s.totalTickets === 0) {
+                    summaryEl.innerHTML =
+                        '<p style="color:#888;text-align:center;padding:20px">📭 El usuario no tiene tickets resueltos en este período</p>';
+                    if (chartPerformance) {
+                        chartPerformance.destroy();
+                        chartPerformance = null;
+                    }
+                    return;
+                }
 
                 if (chartPerformance) chartPerformance.destroy();
 
