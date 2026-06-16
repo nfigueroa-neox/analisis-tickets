@@ -1040,6 +1040,160 @@ CREATE INDEX IF NOT EXISTS idx_tickets_elecmetal_ref ON tickets_elecmetal(ticket
   }
 });
 
+// ─── 5. Rendimiento: tiempos de resolución ──────────────────────────────────
+app.get("/api/performance", requireAdmin, async (req, res) => {
+  try {
+    const { user, start, end } = req.query;
+    if (!user)
+      return res
+        .status(400)
+        .json({ error: "Se requiere el parámetro user (email)" });
+
+    const userEmail = user.toLowerCase();
+    const startDate = start ? new Date(start) : new Date("2020-01-01");
+    const endDate = end ? new Date(end + "T23:59:59.999Z") : new Date();
+
+    // Obtener tickets donde el usuario comentó y que hayan sido resueltos
+    const tickets = await (
+      await getDB()
+    )
+      .collection("incidents")
+      .find({
+        $and: [
+          {
+            "commentaries.createdBy": {
+              $regex: userEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+              $options: "i",
+            },
+          },
+          { date: { $gte: startDate, $lte: endDate } },
+        ],
+      })
+      .project({
+        ticketNumber: 1,
+        title: 1,
+        company: 1,
+        status: 1,
+        date: 1,
+        statusChanges: 1,
+        sla: 1,
+        commentaries: 1,
+      })
+      .toArray();
+
+    // Cargar SLA para prioridad
+    const slas = await db.collection("slas").find({}).toArray();
+    const slaById = {};
+    slas.forEach((s) => (slaById[s._id.toString()] = s.type));
+
+    const resolvedTickets = [];
+
+    for (const ticket of tickets) {
+      // Buscar el cambio a "resuelto"
+      const resolvedChange = (ticket.statusChanges || []).find(
+        (sc) =>
+          (sc.to || "").toLowerCase() === "resuelto" ||
+          (sc.to || "").toLowerCase() === "resuelta",
+      );
+      if (!resolvedChange) continue;
+
+      const createdDate = new Date(ticket.date);
+      const resolvedDate = new Date(resolvedChange.date);
+      const resolutionHours = (resolvedDate - createdDate) / (1000 * 60 * 60);
+
+      if (resolutionHours < 0) continue;
+
+      // Obtener prioridad
+      let priority = null;
+      if (ticket.sla) {
+        const type = slaById[ticket.sla.toString()];
+        if (type)
+          priority = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+      }
+      if (!priority) {
+        const fromExcel = getPriorityFromTicket(ticket.title);
+        if (fromExcel)
+          priority =
+            fromExcel.charAt(0).toUpperCase() +
+            fromExcel.slice(1).toLowerCase();
+      }
+      priority = priority || "Sin prioridad";
+
+      resolvedTickets.push({
+        ticketNumber: ticket.ticketNumber,
+        title: (ticket.title || "").substring(0, 100),
+        company: ticket.company,
+        status: ticket.status,
+        priority,
+        createdDate: createdDate.toISOString(),
+        resolvedDate: resolvedDate.toISOString(),
+        resolutionHours: Math.round(resolutionHours * 100) / 100,
+      });
+    }
+
+    // Agrupar por prioridad
+    const byPriority = {};
+    resolvedTickets.forEach((t) => {
+      if (!byPriority[t.priority]) {
+        byPriority[t.priority] = {
+          priority: t.priority,
+          count: 0,
+          totalHours: 0,
+          hours: [],
+        };
+      }
+      byPriority[t.priority].count++;
+      byPriority[t.priority].totalHours += t.resolutionHours;
+      byPriority[t.priority].hours.push(t.resolutionHours);
+    });
+
+    const priorityOrder = [
+      "Crítica",
+      "Mayor",
+      "Media",
+      "Menor",
+      "Sin prioridad",
+    ];
+    const hoursByPriority = priorityOrder
+      .filter((p) => byPriority[p])
+      .map((p) => ({
+        priority: p,
+        count: byPriority[p].count,
+        avgHours:
+          byPriority[p].count > 0
+            ? Math.round(
+                (byPriority[p].totalHours / byPriority[p].count) * 100,
+              ) / 100
+            : 0,
+        totalHours: Math.round(byPriority[p].totalHours * 100) / 100,
+      }));
+
+    const totalCount = resolvedTickets.length;
+    const totalHours = resolvedTickets.reduce(
+      (s, t) => s + t.resolutionHours,
+      0,
+    );
+
+    res.json({
+      tickets: resolvedTickets.sort(
+        (a, b) => b.resolutionHours - a.resolutionHours,
+      ),
+      hoursByPriority,
+      summary: {
+        totalTickets: totalCount,
+        avgHours:
+          totalCount > 0
+            ? Math.round((totalHours / totalCount) * 100) / 100
+            : 0,
+        totalHours: Math.round(totalHours * 100) / 100,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Inicio local ──────────────────────────────────────────────────────────
 if (process.env.VERCEL !== "1") {
   (async () => {

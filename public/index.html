@@ -817,6 +817,85 @@
                                 <tbody id="companyTableBody"></tbody>
                             </table>
                         </div>
+
+                        <!-- ═══ Rendimiento en resolución ═══ -->
+                        <div
+                            class="table-section"
+                            id="performanceSection"
+                            style="display: none"
+                        >
+                            <h3>🏆 Rendimiento en resolución</h3>
+                            <div
+                                class="filters"
+                                style="margin-bottom: 16px; padding: 12px 16px"
+                            >
+                                <div class="filter-group">
+                                    <label>Período</label>
+                                    <select
+                                        id="perfPeriod"
+                                        style="min-width: 140px"
+                                        onchange="loadPerformance()"
+                                    >
+                                        <option value="month">Este Mes</option>
+                                        <option value="semester">
+                                            Último Semestre
+                                        </option>
+                                        <option value="year">Último Año</option>
+                                        <option value="total">Total</option>
+                                    </select>
+                                </div>
+                                <div class="filter-group">
+                                    <label>Prioridad</label>
+                                    <select
+                                        id="perfPriority"
+                                        style="min-width: 140px"
+                                        onchange="renderPerformanceChart()"
+                                    >
+                                        <option value="todas">Todas</option>
+                                        <option value="Crítica">Crítica</option>
+                                        <option value="Mayor">Mayor</option>
+                                        <option value="Media">Media</option>
+                                        <option value="Menor">Menor</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="charts-row">
+                                <div
+                                    class="chart-box"
+                                    style="grid-column: 1/-1"
+                                >
+                                    <h3
+                                        style="
+                                            display: flex;
+                                            justify-content: space-between;
+                                            align-items: center;
+                                        "
+                                    >
+                                        📈 Promedio de horas de resolución
+                                        <span
+                                            onclick="
+                                                downloadChart(
+                                                    'chartPerformance',
+                                                    'rendimiento_resolucion',
+                                                )
+                                            "
+                                            style="
+                                                cursor: pointer;
+                                                font-size: 16px;
+                                            "
+                                            title="Descargar PNG"
+                                            >📥</span
+                                        >
+                                    </h3>
+                                    <canvas id="chartPerformance"></canvas>
+                                </div>
+                            </div>
+                            <div
+                                class="summary"
+                                id="perfSummary"
+                                style="margin-top: 12px"
+                            ></div>
+                        </div>
                     </div>
 
                     <!-- Modal -->
@@ -1107,6 +1186,8 @@
             let chartCompany = null;
             let chartPeriod = null;
             let chartPriority = null;
+            let chartPerformance = null;
+            let lastPerfData = null;
             let lastData = null;
             let selectedCompany = null;
             let selectedPriority = null;
@@ -1401,6 +1482,9 @@
 
                     renderResults(data);
                     results.style.display = "block";
+
+                    // Cargar rendimiento en resolución
+                    loadPerformance();
                 } catch (err) {
                     alert("Error al consultar: " + err.message);
                 } finally {
@@ -1819,6 +1903,175 @@
                         },
                     ],
                 });
+            }
+
+            // ─── Rendimiento en resolución ───────────────────────────────────────
+            async function loadPerformance() {
+                const user = document.getElementById("userSelect").value;
+                if (!user) return;
+
+                const start = document.getElementById("startDate").value;
+                const end = document.getElementById("endDate").value;
+                const period = document.getElementById("perfPeriod").value;
+
+                // Calcular fechas según período
+                let perfStart = start;
+                let perfEnd = end;
+                const now = new Date();
+
+                if (period === "month") {
+                    const first = new Date(
+                        now.getFullYear(),
+                        now.getMonth(),
+                        1,
+                    );
+                    perfStart = first.toISOString().slice(0, 10);
+                    perfEnd = now.toISOString().slice(0, 10);
+                } else if (period === "semester") {
+                    const sixMonthsAgo = new Date(now);
+                    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+                    perfStart = sixMonthsAgo.toISOString().slice(0, 10);
+                    perfEnd = now.toISOString().slice(0, 10);
+                } else if (period === "year") {
+                    const yearAgo = new Date(now);
+                    yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+                    perfStart = yearAgo.toISOString().slice(0, 10);
+                    perfEnd = now.toISOString().slice(0, 10);
+                }
+                // "total" usa las fechas del filtro principal
+
+                try {
+                    const params = new URLSearchParams({
+                        user,
+                        start: perfStart,
+                        end: perfEnd,
+                    });
+                    const res = await fetch(`/api/performance?${params}`);
+
+                    if (res.status === 401) {
+                        doLogout();
+                        return;
+                    }
+
+                    const data = await res.json();
+
+                    if (data.error) {
+                        console.error("Performance error:", data.error);
+                        return;
+                    }
+
+                    lastPerfData = data;
+                    document.getElementById(
+                        "performanceSection",
+                    ).style.display = "block";
+                    renderPerformanceChart();
+                } catch (err) {
+                    console.error("Error loading performance:", err);
+                }
+            }
+
+            function renderPerformanceChart() {
+                if (!lastPerfData) return;
+
+                const priorityFilter =
+                    document.getElementById("perfPriority").value;
+                let filtered =
+                    priorityFilter === "todas"
+                        ? lastPerfData.hoursByPriority
+                        : lastPerfData.hoursByPriority.filter(
+                              (p) => p.priority === priorityFilter,
+                          );
+
+                if (filtered.length === 0) {
+                    document.getElementById("perfSummary").innerHTML =
+                        '<p style="color:#888;text-align:center;padding:20px">Sin datos para esta prioridad</p>';
+                    return;
+                }
+
+                const labels = filtered.map((p) => p.priority);
+                const values = filtered.map((p) => p.avgHours);
+                const counts = filtered.map((p) => p.count);
+
+                const colorMap = {
+                    Crítica: "#e74c3c",
+                    Mayor: "#e67e22",
+                    Media: "#f1c40f",
+                    Menor: "#2ecc71",
+                    "Sin prioridad": "#95a5a6",
+                };
+                const bgColors = filtered.map(
+                    (p) => colorMap[p.priority] || "#95a5a6",
+                );
+
+                const ctx = document.getElementById("chartPerformance");
+                if (chartPerformance) chartPerformance.destroy();
+
+                chartPerformance = new Chart(ctx, {
+                    type: "bar",
+                    data: {
+                        labels,
+                        datasets: [
+                            {
+                                label: "Promedio (horas)",
+                                data: values,
+                                backgroundColor: bgColors,
+                                borderRadius: 6,
+                            },
+                        ],
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: (ctx) => {
+                                        const i = ctx.dataIndex;
+                                        return [
+                                            `${values[i]}h promedio`,
+                                            `${counts[i]} ticket${counts[i] !== 1 ? "s" : ""} resuelto${counts[i] !== 1 ? "s" : ""}`,
+                                        ];
+                                    },
+                                },
+                            },
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: "Horas",
+                                },
+                                ticks: {
+                                    callback: (v) => v + "h",
+                                },
+                            },
+                            x: {
+                                grid: { display: false },
+                            },
+                        },
+                    },
+                });
+
+                // Resumen
+                const s = lastPerfData.summary;
+                document.getElementById("perfSummary").innerHTML = `
+                    <div style="display:flex;gap:16px;flex-wrap:wrap">
+                        <div class="card">
+                            <div class="value">${s.totalTickets}</div>
+                            <div class="label">Tickets resueltos</div>
+                        </div>
+                        <div class="card">
+                            <div class="value">${s.avgHours}h</div>
+                            <div class="label">Promedio general</div>
+                        </div>
+                        <div class="card">
+                            <div class="value">${s.totalHours}h</div>
+                            <div class="label">Total horas</div>
+                        </div>
+                    </div>
+                `;
             }
 
             // ─── Switch de secciones del menú lateral ────────────────────────────
