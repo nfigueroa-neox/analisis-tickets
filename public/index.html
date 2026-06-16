@@ -818,9 +818,6 @@
                                             "
                                             onchange="loadPerformance()"
                                         >
-                                            <option value="month">
-                                                Este Mes
-                                            </option>
                                             <option value="semester">
                                                 Último Semestre
                                             </option>
@@ -1927,15 +1924,7 @@
                 let perfEnd = end;
                 const now = new Date();
 
-                if (period === "month") {
-                    const first = new Date(
-                        now.getFullYear(),
-                        now.getMonth(),
-                        1,
-                    );
-                    perfStart = first.toISOString().slice(0, 10);
-                    perfEnd = now.toISOString().slice(0, 10);
-                } else if (period === "semester") {
+                if (period === "semester") {
                     const sixMonthsAgo = new Date(now);
                     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
                     perfStart = sixMonthsAgo.toISOString().slice(0, 10);
@@ -1945,8 +1934,10 @@
                     yearAgo.setFullYear(yearAgo.getFullYear() - 1);
                     perfStart = yearAgo.toISOString().slice(0, 10);
                     perfEnd = now.toISOString().slice(0, 10);
+                } else if (period === "total") {
+                    perfStart = "2020-01-01";
+                    perfEnd = now.toISOString().slice(0, 10);
                 }
-                // "total" usa las fechas del filtro principal
 
                 try {
                     const params = new URLSearchParams({
