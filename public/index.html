@@ -659,7 +659,16 @@
                         </div>
                         <div class="filter-group">
                             <label>Empresa</label>
-                            <select id="companySelect">
+                            <select
+                                id="companySelect"
+                                onchange="
+                                    if (
+                                        document.getElementById('results').style
+                                            .display !== 'none'
+                                    )
+                                        loadPerformance();
+                                "
+                            >
                                 <option value="todas">Todas</option>
                             </select>
                         </div>
