@@ -818,6 +818,9 @@
                                             "
                                             onchange="loadPerformance()"
                                         >
+                                            <option value="month">
+                                                Este Mes
+                                            </option>
                                             <option value="semester">
                                                 Último Semestre
                                             </option>
@@ -1924,7 +1927,15 @@
                 let perfEnd = end;
                 const now = new Date();
 
-                if (period === "semester") {
+                if (period === "month") {
+                    const first = new Date(
+                        now.getFullYear(),
+                        now.getMonth(),
+                        1,
+                    );
+                    perfStart = first.toISOString().slice(0, 10);
+                    perfEnd = now.toISOString().slice(0, 10);
+                } else if (period === "semester") {
                     const sixMonthsAgo = new Date(now);
                     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
                     perfStart = sixMonthsAgo.toISOString().slice(0, 10);
