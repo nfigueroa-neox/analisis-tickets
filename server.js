@@ -1086,7 +1086,10 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
     console.log("Performance - tickets encontrados:", tickets.length);
 
     for (const ticket of tickets) {
-      // Buscar el cambio a "resuelto" en statusChanges
+      // Solo interesan tickets con estado actual "resuelto"
+      if ((ticket.status || "").toLowerCase() !== "resuelto") continue;
+
+      // Fecha de resolución: usar el último statusChange, o el último comentario
       const statusChanges = ticket.statusChanges || [];
       const resolvedChange = statusChanges.find(
         (sc) =>
@@ -1095,19 +1098,15 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
           (sc.to || "").toLowerCase() === "cerrado",
       );
 
-      // Si no hay statusChange a resuelto, verificar status actual
       let resolvedDate = null;
       if (resolvedChange) {
         resolvedDate = new Date(resolvedChange.date);
-      } else if ((ticket.status || "").toLowerCase() === "resuelto") {
-        // Usar la fecha del último statusChange o el último comentario como aprox.
-        if (statusChanges.length > 0) {
-          resolvedDate = new Date(statusChanges[statusChanges.length - 1].date);
-        } else if (ticket.commentaries && ticket.commentaries.length > 0) {
-          const lastComment =
-            ticket.commentaries[ticket.commentaries.length - 1];
-          if (lastComment.date) resolvedDate = new Date(lastComment.date);
-        }
+      } else if (statusChanges.length > 0) {
+        // Último statusChange como aproximación
+        resolvedDate = new Date(statusChanges[statusChanges.length - 1].date);
+      } else if (ticket.commentaries && ticket.commentaries.length > 0) {
+        const lastComment = ticket.commentaries[ticket.commentaries.length - 1];
+        if (lastComment.date) resolvedDate = new Date(lastComment.date);
       }
 
       if (!resolvedDate) continue;
@@ -1118,7 +1117,7 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
           tn: ticket.ticketNumber,
           status: ticket.status,
           scCount: statusChanges.length,
-          resolvedFrom: resolvedChange ? "statusChange" : "fallback",
+          hasResolvedChange: !!resolvedChange,
           resolvedDate: resolvedDate.toISOString(),
           createdDate: ticket.date,
         });
