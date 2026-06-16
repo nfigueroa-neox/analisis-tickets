@@ -1101,42 +1101,26 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
         }
       });
       if (userComments.length === 0) continue;
-      const firstUserComment = new Date(userComments[0].date);
 
-      // Fecha de resolución
-      const sc = ticket.statusChanges || [];
-      const rc = sc.find(
-        (s) =>
-          (s.to || "").toLowerCase() === "resuelto" ||
-          (s.to || "").toLowerCase() === "resuelta" ||
-          (s.to || "").toLowerCase() === "cerrado",
-      );
-
-      let resolvedDate = null;
-      if (rc) resolvedDate = new Date(rc.date);
-      else if (sc.length > 0) resolvedDate = new Date(sc[sc.length - 1].date);
-      else if (userComments.length > 0) {
-        resolvedDate = new Date(userComments[userComments.length - 1].date);
+      // Sumar campo hh (en minutos) de todos los comentarios del usuario
+      let totalMinutos = 0;
+      let lastDate = null;
+      for (const c of userComments) {
+        if (c.hh !== undefined && c.hh !== null) {
+          const val = parseFloat(c.hh);
+          if (!isNaN(val) && val > 0 && val < 1440) totalMinutos += val;
+        }
+        if (!lastDate || new Date(c.date) > lastDate)
+          lastDate = new Date(c.date);
       }
 
-      if (!resolvedDate || resolvedDate < startDate || resolvedDate > endDate)
-        continue;
+      // Usar la fecha del último comentario como referencia del período
+      const resolvedDate = lastDate || new Date();
+      if (resolvedDate < startDate || resolvedDate > endDate) continue;
 
-      // Horas desde primer comentario del usuario hasta resolución
-      const hours = (resolvedDate - firstUserComment) / (1000 * 60 * 60);
-      if (resolvedTickets.length < 5) {
-        console.log(
-          "Ticket:",
-          ticket.ticketNumber,
-          "firstComment:",
-          firstUserComment.toISOString(),
-          "resolved:",
-          resolvedDate.toISOString(),
-          "horas:",
-          Math.round(hours * 100) / 100,
-        );
-      }
-      if (hours <= 0 || hours > 720) continue;
+      // Horas reales trabajadas (hh convertido de minutos a horas)
+      const hours = totalMinutos / 60;
+      if (hours <= 0 || hours > 168) continue; // max 1 semana
 
       // Prioridad
       const PRIO_LABELS = {
@@ -1173,9 +1157,11 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
     );
     if (resolvedTickets.length > 0) {
       console.log(
-        "Primer ticket:",
-        resolvedTickets[0].ticketNumber,
-        resolvedTickets[0].resolvedDate,
+        "Primeros tickets (horas reales):",
+        resolvedTickets.slice(0, 3).map((t) => ({
+          tn: t.ticketNumber,
+          h: t.resolutionHours,
+        })),
       );
     }
 
