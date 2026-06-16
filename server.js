@@ -1226,8 +1226,18 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
         totalHours: Math.round(v.totalHours * 100) / 100,
       }));
 
+    // Devolver también los tickets individuales para filtro local por prioridad
+    const ticketsData = resolvedTickets.map((t) => ({
+      ticketNumber: t.ticketNumber,
+      priority: t.priority,
+      resolutionHours: t.resolutionHours,
+      resolvedDate: t.resolvedDate,
+    }));
+
     res.json({
       buckets: bucketsArr,
+      tickets: ticketsData,
+      groupBy,
       summary: {
         totalTickets: resolvedTickets.length,
         avgHours:
