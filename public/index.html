@@ -819,14 +819,12 @@
                                             onchange="loadPerformance()"
                                         >
                                             <option value="month">
-                                                Este Mes
+                                                Mensual
                                             </option>
                                             <option value="semester">
-                                                Último Semestre
+                                                Semestral
                                             </option>
-                                            <option value="year">
-                                                Último Año
-                                            </option>
+                                            <option value="year">Anual</option>
                                             <option value="total">Total</option>
                                         </select>
                                         <select
@@ -839,7 +837,7 @@
                                                 background: white;
                                                 font-weight: 400;
                                             "
-                                            onchange="renderPerformanceChart()"
+                                            onchange="loadPerformance()"
                                         >
                                             <option value="todas">Todas</option>
                                             <option value="Alta">Alta</option>
@@ -1924,26 +1922,23 @@
                 let perfStart, perfEnd, groupBy;
 
                 if (period === "month") {
-                    const first = new Date(
-                        now.getFullYear(),
-                        now.getMonth(),
-                        1,
-                    );
-                    perfStart = first.toISOString().slice(0, 10);
-                    perfEnd = now.toISOString().slice(0, 10);
-                    groupBy = "week";
-                } else if (period === "semester") {
                     const sm = new Date(now);
                     sm.setMonth(sm.getMonth() - 6);
                     perfStart = sm.toISOString().slice(0, 10);
                     perfEnd = now.toISOString().slice(0, 10);
                     groupBy = "month";
+                } else if (period === "semester") {
+                    const sm = new Date(now);
+                    sm.setFullYear(sm.getFullYear() - 3);
+                    perfStart = sm.toISOString().slice(0, 10);
+                    perfEnd = now.toISOString().slice(0, 10);
+                    groupBy = "semester";
                 } else if (period === "year") {
                     const ya = new Date(now);
-                    ya.setFullYear(ya.getFullYear() - 1);
+                    ya.setFullYear(ya.getFullYear() - 6);
                     perfStart = ya.toISOString().slice(0, 10);
                     perfEnd = now.toISOString().slice(0, 10);
-                    groupBy = "month";
+                    groupBy = "year";
                 } else if (period === "total") {
                     perfStart = "2020-01-01";
                     perfEnd = now.toISOString().slice(0, 10);
@@ -1986,9 +1981,77 @@
             }
 
             function renderPerformanceChart() {
-                if (!lastPerfData) return;
-                // El filtrado se hace en el backend, solo renderizamos
-                loadPerformance();
+                if (!lastPerfData || !lastPerfData.buckets) return;
+                const canvas = document.getElementById("chartPerformance");
+                const summaryEl = document.getElementById("perfSummary");
+                const buckets = lastPerfData.buckets;
+                const s = lastPerfData.summary;
+
+                if (chartPerformance) chartPerformance.destroy();
+
+                const labels = buckets.map((b) => b.label);
+                const values = buckets.map((b) => b.avgHours);
+                const counts = buckets.map((b) => b.count);
+
+                requestAnimationFrame(() => {
+                    try {
+                        chartPerformance = new Chart(canvas, {
+                            type: "bar",
+                            data: {
+                                labels,
+                                datasets: [
+                                    {
+                                        label: "Promedio (horas)",
+                                        data: values,
+                                        backgroundColor: "#4e79a7",
+                                        borderRadius: 6,
+                                    },
+                                ],
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: true,
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: (ctx) => {
+                                                const i = ctx.dataIndex;
+                                                return [
+                                                    `${values[i]}h promedio`,
+                                                    `${counts[i]} ticket${counts[i] !== 1 ? "s" : ""}`,
+                                                ];
+                                            },
+                                        },
+                                    },
+                                },
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        title: { display: true, text: "Horas" },
+                                        ticks: { callback: (v) => v + "h" },
+                                    },
+                                    x: { grid: { display: false } },
+                                },
+                            },
+                        });
+                    } catch (e) {
+                        console.error("Error al crear chartPerformance:", e);
+                    }
+                });
+
+                summaryEl.innerHTML = `
+                    <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center">
+                        <div class="card">
+                            <div class="value">${s.totalTickets}</div>
+                            <div class="label">Tickets resueltos</div>
+                        </div>
+                        <div class="card">
+                            <div class="value">${s.avgHours}h</div>
+                            <div class="label">Promedio general</div>
+                        </div>
+                    </div>
+                `;
             }
 
             // ─── Switch de secciones del menú lateral ────────────────────────────

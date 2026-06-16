@@ -1173,21 +1173,20 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
 
     // Agrupar por bucket de tiempo según groupBy
     const bucketKey = {
-      week: (d) => {
-        const y = d.getFullYear();
-        const startOfYear = new Date(y, 0, 1);
-        const weekNum = Math.ceil(
-          ((d - startOfYear) / 86400000 + startOfYear.getDay() + 1) / 7,
-        );
-        return `${y}-S${String(weekNum).padStart(2, "0")}`;
-      },
       month: (d) =>
         `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+      semester: (d) => {
+        const sem = d.getMonth() < 6 ? "S1" : "S2";
+        return `${d.getFullYear()}-${sem}`;
+      },
       year: (d) => `${d.getFullYear()}`,
     };
 
     const labelKey = {
-      week: (k) => `Sem ${k.split("-")[1]}`,
+      semester: (k) => {
+        const [y, s] = k.split("-");
+        return `${s} ${y}`;
+      },
       month: (k) => {
         const [y, m] = k.split("-");
         const meses = [
@@ -1232,18 +1231,8 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
         totalHours: Math.round(v.totalHours * 100) / 100,
       }));
 
-    // Devolver también los tickets individuales para filtro local por prioridad
-    const ticketsData = resolvedTickets.map((t) => ({
-      ticketNumber: t.ticketNumber,
-      priority: t.priority,
-      resolutionHours: t.resolutionHours,
-      resolvedDate: t.resolvedDate,
-    }));
-
     res.json({
       buckets: bucketsArr,
-      tickets: ticketsData,
-      groupBy,
       summary: {
         totalTickets: resolvedTickets.length,
         avgHours:
