@@ -1948,8 +1948,11 @@
                 try {
                     const priorityFilter =
                         document.getElementById("perfPriority").value;
+                    const company =
+                        document.getElementById("companySelect").value;
                     const params = new URLSearchParams({
                         user,
+                        company,
                         start: perfStart,
                         end: perfEnd,
                         groupBy,

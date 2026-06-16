@@ -1043,7 +1043,7 @@ CREATE INDEX IF NOT EXISTS idx_tickets_elecmetal_ref ON tickets_elecmetal(ticket
 // ─── 5. Rendimiento: tiempos de resolución ──────────────────────────────────
 app.get("/api/performance", requireAdmin, async (req, res) => {
   try {
-    const { user, start, end, groupBy, priority } = req.query;
+    const { user, company, start, end, groupBy, priority } = req.query;
     if (!user)
       return res
         .status(400)
@@ -1062,10 +1062,12 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
           $regex: userEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
           $options: "i",
         },
+        ...(company && company !== "todas" ? { company } : {}),
       })
       .project({
         ticketNumber: 1,
         title: 1,
+        company: 1,
         status: 1,
         date: 1,
         statusChanges: 1,
