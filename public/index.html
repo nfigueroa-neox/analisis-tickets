@@ -1967,7 +1967,8 @@
                     const data = await res.json();
 
                     if (data.error) {
-                        console.error("Performance error:", data.error);
+                        document.getElementById("perfSummary").innerHTML =
+                            `<p style="color:#e74c3c;text-align:center;padding:20px">❌ Error: ${data.error}</p>`;
                         return;
                     }
 

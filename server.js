@@ -1078,10 +1078,15 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
     const slaById = {};
     slas.forEach((s) => (slaById[s._id.toString()] = s.type));
 
+    console.log(
+      `Performance: ${tickets.length} tickets encontrados para ${userEmail}`,
+    );
+
     const resolvedTickets = [];
 
     for (const ticket of tickets) {
-      if ((ticket.status || "").toLowerCase() !== "resuelto") continue;
+      const isResolved = (ticket.status || "").toLowerCase() === "resuelto";
+      if (!isResolved) continue;
 
       const sc = ticket.statusChanges || [];
       const rc = sc.find(
@@ -1120,8 +1125,12 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
         if (t) pk = t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
       }
       if (!pk) {
-        const fe = getPriorityFromTicket(ticket.title);
-        if (fe) pk = fe.charAt(0).toUpperCase() + fe.slice(1).toLowerCase();
+        try {
+          const fe = getPriorityFromTicket(ticket.title);
+          if (fe) pk = fe.charAt(0).toUpperCase() + fe.slice(1).toLowerCase();
+        } catch (e) {
+          // excelPriorityMap no disponible
+        }
       }
 
       resolvedTickets.push({
@@ -1130,6 +1139,17 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
         resolvedDate,
         resolutionHours: Math.round(hours * 100) / 100,
       });
+    }
+
+    console.log(
+      `Performance: ${resolvedTickets.length} tickets resueltos encontrados`,
+    );
+    if (resolvedTickets.length > 0) {
+      console.log(
+        "Primer ticket:",
+        resolvedTickets[0].ticketNumber,
+        resolvedTickets[0].resolvedDate,
+      );
     }
 
     // Agrupar por bucket de tiempo según groupBy
