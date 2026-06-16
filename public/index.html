@@ -1951,11 +1951,14 @@
                 }
 
                 try {
+                    const priorityFilter =
+                        document.getElementById("perfPriority").value;
                     const params = new URLSearchParams({
                         user,
                         start: perfStart,
                         end: perfEnd,
                         groupBy,
+                        priority: priorityFilter,
                     });
                     const res = await fetch(`/api/performance?${params}`);
 
@@ -1984,174 +1987,8 @@
 
             function renderPerformanceChart() {
                 if (!lastPerfData) return;
-
-                const perfSummary = document.getElementById("perfSummary");
-                const canvas = document.getElementById("chartPerformance");
-
-                if (lastPerfData.summary.totalTickets === 0) {
-                    perfSummary.innerHTML =
-                        '<p style="color:#888;text-align:center;padding:20px">📭 El usuario no tiene tickets resueltos en este período</p>';
-                    if (chartPerformance) {
-                        chartPerformance.destroy();
-                        chartPerformance = null;
-                    }
-                    return;
-                }
-
-                // Filtrar tickets por prioridad
-                const priorityFilter =
-                    document.getElementById("perfPriority").value;
-                const tickets = lastPerfData.tickets || [];
-                const filtered =
-                    priorityFilter === "todas"
-                        ? tickets
-                        : tickets.filter((t) => t.priority === priorityFilter);
-
-                if (filtered.length === 0) {
-                    perfSummary.innerHTML =
-                        '<p style="color:#888;text-align:center;padding:20px">Sin tickets para esta prioridad</p>';
-                    if (chartPerformance) {
-                        chartPerformance.destroy();
-                        chartPerformance = null;
-                    }
-                    return;
-                }
-
-                // Reagrupar localmente según el groupBy del backend
-                const groupBy = lastPerfData.groupBy || "month";
-                const getKey = (d) => {
-                    const dt = new Date(d);
-                    if (groupBy === "week") {
-                        const y = dt.getFullYear();
-                        const sol = new Date(y, 0, 1);
-                        const wn = Math.ceil(
-                            ((dt - sol) / 86400000 + sol.getDay() + 1) / 7,
-                        );
-                        return `${y}-S${String(wn).padStart(2, "0")}`;
-                    } else if (groupBy === "year") {
-                        return `${dt.getFullYear()}`;
-                    }
-                    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
-                };
-                const getLabel = (k) => {
-                    if (groupBy === "week") return `Sem ${k.split("-")[1]}`;
-                    if (groupBy === "year") return k;
-                    const [y, m] = k.split("-");
-                    const meses = [
-                        "Ene",
-                        "Feb",
-                        "Mar",
-                        "Abr",
-                        "May",
-                        "Jun",
-                        "Jul",
-                        "Ago",
-                        "Sep",
-                        "Oct",
-                        "Nov",
-                        "Dic",
-                    ];
-                    return `${meses[parseInt(m) - 1]} ${y}`;
-                };
-
-                const bucketsMap = {};
-                filtered.forEach((t) => {
-                    const key = getKey(t.resolvedDate);
-                    if (!bucketsMap[key])
-                        bucketsMap[key] = {
-                            label: getLabel(key),
-                            count: 0,
-                            totalHours: 0,
-                        };
-                    bucketsMap[key].count++;
-                    bucketsMap[key].totalHours += t.resolutionHours;
-                });
-
-                const buckets = Object.entries(bucketsMap)
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([, v]) => ({
-                        ...v,
-                        avgHours:
-                            v.count > 0
-                                ? Math.round((v.totalHours / v.count) * 100) /
-                                  100
-                                : 0,
-                    }));
-
-                const labels = buckets.map((b) => b.label);
-                const values = buckets.map((b) => b.avgHours);
-                const counts = buckets.map((b) => b.count);
-
-                if (chartPerformance) chartPerformance.destroy();
-
-                requestAnimationFrame(() => {
-                    try {
-                        chartPerformance = new Chart(canvas, {
-                            type: "bar",
-                            data: {
-                                labels,
-                                datasets: [
-                                    {
-                                        label: "Promedio (horas)",
-                                        data: values,
-                                        backgroundColor: "#4e79a7",
-                                        borderRadius: 6,
-                                    },
-                                ],
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: true,
-                                plugins: {
-                                    legend: { display: false },
-                                    tooltip: {
-                                        callbacks: {
-                                            label: (ctx) => {
-                                                const i = ctx.dataIndex;
-                                                return [
-                                                    `${values[i]}h promedio`,
-                                                    `${counts[i]} ticket${counts[i] !== 1 ? "s" : ""}`,
-                                                ];
-                                            },
-                                        },
-                                    },
-                                },
-                                scales: {
-                                    y: {
-                                        beginAtZero: true,
-                                        title: { display: true, text: "Horas" },
-                                        ticks: { callback: (v) => v + "h" },
-                                    },
-                                    x: { grid: { display: false } },
-                                },
-                            },
-                        });
-                    } catch (e) {
-                        console.error("Error al crear chartPerformance:", e);
-                    }
-                });
-
-                const totalTickets = filtered.length;
-                const totalHours = filtered.reduce(
-                    (s, t) => s + t.resolutionHours,
-                    0,
-                );
-                const avgHours =
-                    totalTickets > 0
-                        ? Math.round((totalHours / totalTickets) * 100) / 100
-                        : 0;
-                perfSummary.innerHTML = `
-                    <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center">
-                        <div class="card">
-                            <div class="value">${totalTickets}</div>
-                            <div class="label">Tickets resueltos</div>
-                        </div>
-                        <div class="card">
-                            <div class="value">${avgHours}h</div>
-                            <div class="label">Promedio general</div>
-                        </div>
-                    </div>
-                `;
+                // El filtrado se hace en el backend, solo renderizamos
+                loadPerformance();
             }
 
             // ─── Switch de secciones del menú lateral ────────────────────────────

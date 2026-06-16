@@ -1043,7 +1043,7 @@ CREATE INDEX IF NOT EXISTS idx_tickets_elecmetal_ref ON tickets_elecmetal(ticket
 // ─── 5. Rendimiento: tiempos de resolución ──────────────────────────────────
 app.get("/api/performance", requireAdmin, async (req, res) => {
   try {
-    const { user, start, end, groupBy } = req.query;
+    const { user, start, end, groupBy, priority } = req.query;
     if (!user)
       return res
         .status(400)
@@ -1144,9 +1144,15 @@ app.get("/api/performance", requireAdmin, async (req, res) => {
         }
       }
 
+      const ticketPriority = PRIO_LABELS[pk] || "Sin prioridad";
+
+      // Filtrar por prioridad si se especificó
+      if (priority && priority !== "todas" && ticketPriority !== priority)
+        continue;
+
       resolvedTickets.push({
         ticketNumber: ticket.ticketNumber,
-        priority: PRIO_LABELS[pk] || "Sin prioridad",
+        priority: ticketPriority,
         resolvedDate,
         resolutionHours: Math.round(hours * 100) / 100,
       });
